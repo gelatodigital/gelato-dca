@@ -17,6 +17,20 @@ task("accounts", "Prints the list of accounts", async () => {
  * @type import('hardhat/config').HardhatUserConfig
  */
 module.exports = {
-  solidity: "0.7.3",
+  solidity: {
+    version: "0.6.6",
+    settings: {
+      optimizer: require("./solcOptimiserSettings.js")
+    }
+  },
+
+  paths: {
+    sources: "./contracts",
+    tests: "./test/",
+  },
+
+  mocha: {
+    timeout: 0
+  }
 };
 
