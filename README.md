@@ -34,6 +34,14 @@ PRIVATE_KEY=0x****************************************************************
 INFURA_API_KEY=********************************
 ```
 
+## Contract Addresses
+### Ropsten
+Proxy: 0x4A0C59CcCae7B4F0732a4A1b9A7BDA49cc1d88F9
+Swap implementation: 0x7617E806f18aE27D617e75baDa80a73238Cf1cC7
+Lending implementation: 0xdEbF71D29524447D7A29CDf29Ba09fc6acb017a6
+Burn gas helper: 0x5758BD3DC2552e9072d5Ff6c0312816f541A0213
+Supported platform wallets: 0x3fFFF2F4f6C0831FAC59534694ACd14AC2Ea501b
+
 ### Functionalities
 
 
