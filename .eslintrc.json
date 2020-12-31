@@ -1,0 +1,13 @@
+{
+  "env": {
+    "commonjs": true,
+    "node": true,
+    "mocha": true,
+    "es6": true
+  },
+  "extends": ["eslint:recommended", "prettier"],
+  "parserOptions": {
+    "ecmaVersion": 2019
+  },
+  "rules": {}
+}
