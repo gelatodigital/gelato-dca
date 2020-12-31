@@ -1,11 +1,10 @@
 pragma solidity 0.6.6;
 pragma experimental ABIEncoderV2;
 
-import "../wrappers/AAVE/DataTypes.sol";
-import "../wrappers/AAVE/IProtocolDataProvider.sol";
+import '../wrappers/AAVE/DataTypes.sol';
+import '../wrappers/AAVE/IProtocolDataProvider.sol';
 
 interface IAaveLendingPoolV2 {
-
   /**
    * @dev Deposits an `amount` of underlying asset into the reserve, receiving in return overlying aTokens.
    * - E.g. User deposits 100 USDC and gets in return 100 aUSDC
