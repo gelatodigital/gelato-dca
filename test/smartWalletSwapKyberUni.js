@@ -1,12 +1,9 @@
-const hre = require('hardhat');
-const IERC20Ext = hre.artifacts.readArtifactSync('IERC20Ext');
-const SmartWalletSwapImplementation = hre.artifacts.readArtifactSync(
+const { ethers, artifacts } = require('hardhat');
+const IERC20Ext = artifacts.readArtifactSync('IERC20Ext');
+const SmartWalletSwapImplementation = artifacts.readArtifactSync(
   'SmartWalletSwapImplementation',
 );
-// const SmartWalletSwapProxy = hre.artifacts.readArtifactSync('SmartWalletSwapProxy');
-const SmartWalletLending = hre.artifacts.readArtifactSync('SmartWalletLending');
-const BurnGasHelper = hre.artifacts.readArtifactSync('BurnGasHelper');
-const GasToken = hre.artifacts.readArtifactSync('IGasToken');
+const GasToken = artifacts.readArtifactSync('IGasToken');
 
 // address of uniswap router in mainnet
 const kyberProxy = '0x9AAb3f75489902f3a48495025729a0AF77d4b11e';
@@ -24,69 +21,54 @@ let lending;
 let swapImplementation;
 let swapProxy;
 let burnGasHelper;
-let user;
 let admin;
+let adminAddress;
 
 describe('test some simple trades', async () => {
   before('test trade in uniswap curve', async () => {
-    [admin] = await hre.ethers.getSigners();
-    user = admin.address;
-    const burnGasHelperFactory = await hre.ethers.getContractFactory(
+    [admin] = await ethers.getSigners();
+    adminAddress = await admin.getAddress();
+    const burnGasHelperFactory = await ethers.getContractFactory(
       'BurnGasHelper',
       admin,
     );
-    const gasHelperDeployTx = await burnGasHelperFactory.deploy(
-      admin.address,
+    burnGasHelper = await burnGasHelperFactory.deploy(
+      adminAddress,
       gasTokenAddress,
       14154,
       6870,
       24000,
     );
-    await gasHelperDeployTx.deployed();
-    burnGasHelper = new hre.ethers.Contract(
-      gasHelperDeployTx.address,
-      BurnGasHelper.abi,
-      admin,
-    );
 
-    const lendingFactory = await hre.ethers.getContractFactory(
+    const lendingFactory = await ethers.getContractFactory(
       'SmartWalletLending',
       admin,
     );
-    const lendingDeployTx = await lendingFactory.deploy(admin.address);
-    await lendingDeployTx.deployed();
-    lending = new hre.ethers.Contract(
-      lendingDeployTx.address,
-      SmartWalletLending.abi,
-      admin,
-    );
+    lending = await lendingFactory.deploy(adminAddress);
 
-    const swapImplementationFactory = await hre.ethers.getContractFactory(
+    const swapImplementationFactory = await ethers.getContractFactory(
       'SmartWalletSwapImplementation',
       admin,
     );
-    const swapImplementationDeployTx = await swapImplementationFactory.deploy(
-      admin.address,
-    );
-    await swapImplementationDeployTx.deployed();
-    swapImplementation = new hre.ethers.Contract(
-      swapImplementationDeployTx.address,
-      SmartWalletSwapImplementation.abi,
-      admin,
-    );
 
-    const swapProxyFactory = await hre.ethers.getContractFactory(
+    swapImplementation = await swapImplementationFactory.deploy(adminAddress);
+
+    const swapProxyFactory = await ethers.getContractFactory(
       'SmartWalletSwapProxy',
       admin,
     );
-    const swapProxyDeployTx = await swapProxyFactory.deploy(
-      admin.address,
+
+    const swapProxyWithoutFunctions = await swapProxyFactory.deploy(
+      adminAddress,
       swapImplementation.address,
       kyberProxy,
       [uniswapRouter, sushiswapRouter],
     );
-    swapProxy = new hre.ethers.Contract(
-      swapProxyDeployTx.address,
+
+    // The proxy will not have the correct abis to be able to access the functions
+    // of the implementation contract
+    swapProxy = new ethers.Contract(
+      swapProxyWithoutFunctions.address,
       SmartWalletSwapImplementation.abi,
       admin,
     );
@@ -99,18 +81,14 @@ describe('test some simple trades', async () => {
     );
     // update storage data
     await swapProxy.updateLendingImplementation(lending.address);
-    await swapProxy.updateSupportedPlatformWallets([user], true);
+    await swapProxy.updateSupportedPlatformWallets([adminAddress], true);
     await swapProxy.updateBurnGasHelper(burnGasHelper.address);
 
-    // mint and transfer gas token to user
-    let gasToken = new hre.ethers.Contract(
-      gasTokenAddress,
-      GasToken.abi,
-      admin,
-    );
+    // mint and transfer gas token to adminAddress
+    let gasToken = await ethers.getContractAt(GasToken.abi, gasTokenAddress);
     await gasToken.mint(100);
     await gasToken.mint(100);
-    await gasToken.transfer(user, 200);
+    await gasToken.transfer(adminAddress, 200);
 
     let tokenAddresses = [
       gasTokenAddress,
@@ -119,12 +97,8 @@ describe('test some simple trades', async () => {
       daiAddress,
     ];
     for (let i = 0; i < tokenAddresses.length; i++) {
-      let token = new hre.ethers.Contract(
-        tokenAddresses[i],
-        IERC20Ext.abi,
-        admin,
-      );
-      let val = hre.ethers.utils.parseEther('100000');
+      let token = await ethers.getContractAt(IERC20Ext.abi, tokenAddresses[i]);
+      let val = ethers.utils.parseEther('100000');
       await token.approve(swapProxy.address, val.toString());
     }
   });
@@ -133,7 +107,7 @@ describe('test some simple trades', async () => {
     let tokenNames = ['USDT', 'USDC', 'DAI'];
     let tokenAddresses = [usdtAddress, usdcAddress, daiAddress];
     // let tokenDecimals = [6, 6, 18];
-    let ethAmount = hre.ethers.utils.parseEther('1'); // one eth
+    let ethAmount = ethers.utils.parseEther('1'); // one eth
     for (let i = 0; i < tokenAddresses.length; i++) {
       let token = tokenAddresses[i];
       let data = await swapProxy.getExpectedReturnKyber(
@@ -150,9 +124,9 @@ describe('test some simple trades', async () => {
         token,
         ethAmount.toString(),
         minRate.toString(),
-        user,
+        adminAddress,
         8,
-        user,
+        adminAddress,
         emptyHint,
         false,
         { value: ethAmount.toString(), gasLimit: 2000000 },
@@ -166,9 +140,9 @@ describe('test some simple trades', async () => {
         token,
         ethAmount.toString(),
         minRate.toString(),
-        user,
+        adminAddress,
         8,
-        user,
+        adminAddress,
         emptyHint,
         true,
         { value: ethAmount.toString(), gasLimit: 2000000 },
@@ -184,7 +158,7 @@ describe('test some simple trades', async () => {
     let routers = [uniswapRouter, sushiswapRouter];
     let routerNames = ['Uniswap', 'Sushiswap'];
     // let tokenDecimals = [6, 6, 18];
-    let ethAmount = hre.ethers.utils.parseEther('1'); // one eth
+    let ethAmount = ethers.utils.parseEther('1'); // one eth
     for (let i = 0; i < routers.length; i++) {
       for (let j = 0; j < tokenAddresses.length; j++) {
         let token = tokenAddresses[j];
@@ -203,9 +177,9 @@ describe('test some simple trades', async () => {
           ethAmount.toString(),
           minDestAmount.toString(),
           tradePath,
-          user,
+          adminAddress,
           8,
-          user,
+          adminAddress,
           true,
           false,
           { value: ethAmount.toString() },
@@ -219,9 +193,9 @@ describe('test some simple trades', async () => {
           ethAmount.toString(),
           minDestAmount.toString(),
           tradePath,
-          user,
+          adminAddress,
           8,
-          user,
+          adminAddress,
           true,
           true,
           { value: ethAmount.toString() },
@@ -238,12 +212,8 @@ describe('test some simple trades', async () => {
     let tokenNames = ['USDT', 'USDC', 'DAI'];
     let tokenAddresses = [usdtAddress, usdcAddress, daiAddress];
     for (let i = 0; i < tokenAddresses.length; i++) {
-      let token = new hre.ethers.Contract(
-        tokenAddresses[i],
-        IERC20Ext.abi,
-        admin,
-      );
-      let tokenAmount = Math.round((await token.balanceOf(user)) / 5);
+      let token = await ethers.getContractAt(IERC20Ext.abi, tokenAddresses[i]);
+      let tokenAmount = Math.round((await token.balanceOf(adminAddress)) / 5);
       let data = await swapProxy.getExpectedReturnKyber(
         tokenAddresses[i],
         ethAddress,
@@ -258,9 +228,9 @@ describe('test some simple trades', async () => {
         ethAddress,
         tokenAmount.toString(),
         minRate.toString(),
-        user,
+        adminAddress,
         8,
-        user,
+        adminAddress,
         emptyHint,
         false,
       );
@@ -273,9 +243,9 @@ describe('test some simple trades', async () => {
         ethAddress,
         tokenAmount.toString(),
         minRate.toString(),
-        user,
+        adminAddress,
         8,
-        user,
+        adminAddress,
         emptyHint,
         false,
       );
@@ -291,12 +261,11 @@ describe('test some simple trades', async () => {
     let routerNames = ['Uniswap', 'Sushiswap'];
     for (let i = 0; i < routers.length; i++) {
       for (let j = 0; j < tokenAddresses.length; j++) {
-        let token = new hre.ethers.Contract(
-          tokenAddresses[j],
+        let token = await ethers.getContractAt(
           IERC20Ext.abi,
-          admin,
+          tokenAddresses[j],
         );
-        let tokenAmount = Math.round((await token.balanceOf(user)) / 5);
+        let tokenAmount = Math.round((await token.balanceOf(adminAddress)) / 5);
         let tradePath = [tokenAddresses[j], weth]; // get rate needs to use weth
         let data = await swapProxy.getExpectedReturnUniswap(
           routers[i],
@@ -312,12 +281,12 @@ describe('test some simple trades', async () => {
           tokenAmount.toString(),
           minDestAmount.toString(),
           tradePath,
-          user,
+          adminAddress,
           8,
-          user,
+          adminAddress,
           true,
           false,
-          { from: user },
+          { from: adminAddress },
         );
         /* eslint-disable no-console */
         console.log(
@@ -328,12 +297,12 @@ describe('test some simple trades', async () => {
           tokenAmount.toString(),
           minDestAmount.toString(),
           tradePath,
-          user,
+          adminAddress,
           8,
-          user,
+          adminAddress,
           true,
           true,
-          { from: user },
+          { from: adminAddress },
         );
         /* eslint-disable no-console */
         console.log(

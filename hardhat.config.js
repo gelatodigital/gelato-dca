@@ -2,14 +2,15 @@ require('@nomiclabs/hardhat-waffle');
 require('@nomiclabs/hardhat-ethers');
 require('dotenv').config();
 
-require('dotenv').config();
 const ALCHEMY_ID = process.env.ALCHEMY_ID;
 const PRIVATE_KEY_RINKEBY = process.env.PRIVATE_KEY_RINKEBY;
 // const PRIVATE_KEY_MAINNET = process.env.PRIVATE_KEY_MAINNET;
 
 if (!ALCHEMY_ID) {
   /* eslint-disable no-console */
-  console.log('\n !! IMPORTANT !!\n Must set .env var before running hardhat');
+  console.log(
+    '\n !! IMPORTANT !!\n Must set ALCHEMY_ID in .env before running hardhat',
+  );
   process.exit(0);
 }
 
@@ -20,10 +21,6 @@ module.exports = {
       forking: {
         url: `https://eth-mainnet.alchemyapi.io/v2/${ALCHEMY_ID}`,
         blockNumber: 11451429,
-      },
-      // Accounts
-      accounts: {
-        accountsBalance: '1000000000000000000000000',
       },
     },
     rinkeby: {
@@ -65,10 +62,22 @@ module.exports = {
     },
   },
   solidity: {
-    version: '0.6.6',
-    settings: {
-      optimizer: require('./solcOptimiserSettings.js'),
-    },
+    compilers: [
+      // Gelato contracts
+      {
+        version: '0.8.0',
+        settings: {
+          optimizer: require('./solcOptimiserSettings.js'),
+        },
+      },
+      // Krystal contracts
+      {
+        version: '0.6.6',
+        settings: {
+          optimizer: require('./solcOptimiserSettings.js'),
+        },
+      },
+    ],
   },
 
   paths: {
