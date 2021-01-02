@@ -1,27 +1,26 @@
 'use strict';
 const fs = require('fs');
 const util = require('util');
-const got = require('got');
-const yargs = require('yargs');
+// const got = require('got');
+// const yargs = require('yargs');
 
 let path = 'artifacts/contracts';
 
 const readdir = util.promisify(fs.readdir);
 
-async function getFiles(dir, files_, names_){
+async function getFiles(dir, files_, names_) {
   var files = await readdir(dir);
-  for (var i in files){
-      var fullDir = dir + '/' + files[i];
-      if (fs.statSync(fullDir).isDirectory()){
-          await getFiles(fullDir, files_, names_);
-      } else {
-          files_.push(fullDir);
-          names_.push(files[i]);
-      }
+  for (var i in files) {
+    var fullDir = dir + '/' + files[i];
+    if (fs.statSync(fullDir).isDirectory()) {
+      await getFiles(fullDir, files_, names_);
+    } else {
+      files_.push(fullDir);
+      names_.push(files[i]);
+    }
   }
-  return (files_, names_);
+  return files_, names_;
 }
-
 
 async function generateCodeSizeReport() {
   let result = {};
@@ -47,22 +46,24 @@ async function writeReport(report) {
   let jsonContent = JSON.stringify(report, null, '\t');
   let reportDir = `report/`;
   if (!fs.existsSync(reportDir)) {
-    fs.mkdirSync(reportDir, {recursive: true});
+    fs.mkdirSync(reportDir, { recursive: true });
   }
   let reportFile = `${reportDir}contractSize.json`;
   fs.writeFile(reportFile, jsonContent, 'utf8', function (err) {
     if (err) {
+      /* eslint-disable no-console */
       console.log('An error occured while writing JSON Object to File.');
+      /* eslint-disable no-console */
       return console.log(err);
     }
   });
+  /* eslint-disable no-console */
   console.table(report);
 }
 
 async function printContractSize() {
   let contractSizeReport = await generateCodeSizeReport();
   await writeReport(contractSizeReport);
-  
 }
 
 printContractSize();

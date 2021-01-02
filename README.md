@@ -1,29 +1,26 @@
 # Krystal < > Gelato
+
 Automated trading using Krystal &amp; Gelato
-
-
 
 # Introduction
 
 [![built-with openzeppelin](https://img.shields.io/badge/built%20with-OpenZeppelin-3677FF)](https://docs.openzeppelin.com/)
 
-
 Smart Contracts for Smart Wallet to help interacting with Kyber Network's protocol and Uniswap (+ its clones, for example: Sushiswap, SashimiSwap, etc);
 
-
 ## Package Manager
+
 We use `yarn` as the package manager. You may use `npm` and `npx` instead, but commands in bash scripts may have to be changed accordingly.
 
-
 ## Setup
+
 1. Clone this repo
 2. `yarn install`
 
-
 ## Compilation with Buidler
+
 1. `yarn compile` to compile contracts for all solidity versions.
 2. `./cmp.sh` to compile contracts
-
 
 ## Contract Deployment / Interactions
 
@@ -35,7 +32,9 @@ INFURA_API_KEY=********************************
 ```
 
 ## Contract Addresses
+
 ### Ropsten
+
 Proxy: 0x4A0C59CcCae7B4F0732a4A1b9A7BDA49cc1d88F9
 Swap implementation: 0x7617E806f18aE27D617e75baDa80a73238Cf1cC7
 Lending implementation: 0xdEbF71D29524447D7A29CDf29Ba09fc6acb017a6
@@ -44,10 +43,10 @@ Supported platform wallets: 0x3fFFF2F4f6C0831FAC59534694ACd14AC2Ea501b
 
 ### Functionalities
 
-
 #### Exchange tokens
 
 - Get expected returned amount and conversion rate if using Kyber Network's protocol. Use `hint` for reserve routing.
+
 ```
 function getExpectedReturnKyber(
         IERC20Ext src,
@@ -62,6 +61,7 @@ function getExpectedReturnKyber(
 ```
 
 - Get expected returned amount and conversion rate if using Uni-Router, `router` must be added to the list supported routers;
+
 ```
 function getExpectedReturnUniswap(
         IUniswapV2Router02 router,
@@ -111,6 +111,7 @@ function swapUniswap(
 - **ISmartWalletLending.LendingPlatform**: 0: AAVE_V1, 1: AAVE_V2, 2: COMPOUND.
 
 - Swap on Kyber, then deposit to AAVE v1, AAVE v2 and Compound. Allow user to swap on Kyber, then deposit all dest token to Lending platform. If `src == dest`, user deposits directly without swapping. Note: Fee could be applied when user deposits directly.
+
 ```
     function swapKyberAndDeposit(
         ISmartWalletLending.LendingPlatform platform,
@@ -125,7 +126,8 @@ function swapUniswap(
     ) external payable returns (uint256 destAmount);
 ```
 
- - Swap on Uniswap, then deposit to AAVE v1, AAVE v2 and Compound. Allow user to swap on Uniswap, then deposit all dest token to Lending platform. If `src == dest`, user deposits directly without swapping. Note: Fee will be taken in dest token for both direct deposit or swap & deposit.
+- Swap on Uniswap, then deposit to AAVE v1, AAVE v2 and Compound. Allow user to swap on Uniswap, then deposit all dest token to Lending platform. If `src == dest`, user deposits directly without swapping. Note: Fee will be taken in dest token for both direct deposit or swap & deposit.
+
 ```
     function swapUniswapAndDeposit(
         ISmartWalletLending.LendingPlatform platform,
@@ -140,6 +142,7 @@ function swapUniswap(
 ```
 
 - Swap on Kyber, then repay to AAVE v1, AAVE v2 and Compound. Allow user to swap on Kyber, then repay `payAmount` of dest token to Lending platform. If `src == dest`, user repays directly without swapping. Note: Fee could be applied when user repays directly.
+
 ```
     function swapKyberAndRepay(
         ISmartWalletLending.LendingPlatform platform,
@@ -154,7 +157,8 @@ function swapUniswap(
     ) external payable returns (uint256 destAmount);
 ```
 
- - Swap on Uniswap, then repay to AAVE v1, AAVE v2 and Compound. Allow user to swap on Uniswap, then repay all dest token to Lending platform. If `src == dest`, user repays directly without swapping. Note: Fee will be taken in dest token for both direct repay or swap & deposit.
+- Swap on Uniswap, then repay to AAVE v1, AAVE v2 and Compound. Allow user to swap on Uniswap, then repay all dest token to Lending platform. If `src == dest`, user repays directly without swapping. Note: Fee will be taken in dest token for both direct repay or swap & deposit.
+
 ```
     function swapUniswapAndRepay(
         ISmartWalletLending.LendingPlatform platform,
@@ -168,8 +172,8 @@ function swapUniswap(
     ) external payable returns (uint256 destAmount);
 ```
 
-
 - Withdraw tokens from AAVE v1, AAVE v2 and COMPOUND, given token user wants to withdraw. Contract will get the corresponding aToken or cToken to collect from user's wallet, then burn these tokens to get back `token`.
+
 ```
     function withdrawFromLendingPlatform(
         ISmartWalletLending.LendingPlatform platform,
