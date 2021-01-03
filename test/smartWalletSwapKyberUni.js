@@ -1,8 +1,13 @@
 const { ethers, artifacts, network } = require('hardhat');
 const { expect } = require('chai');
-const gelato = require('@gelatonetwork/core');
+const { GelatoCore } = require('@gelatonetwork/core');
 const CPK = require('contract-proxy-kit');
-const IERC20Ext = artifacts.readArtifactSync('IERC20Ext');
+const {
+  encodeStandardTaskCycle,
+  getSubmittedTaskReceipt,
+  getGelatoGasPrices,
+  enableGelatoCore,
+} = require('./gelatoHelper');
 const SmartWalletSwapImplementation = artifacts.readArtifactSync(
   'SmartWalletSwapImplementation',
 );
@@ -10,7 +15,7 @@ const GasToken = artifacts.readArtifactSync('IGasToken');
 
 // mainnet addresses
 const kyberProxy = '0x9AAb3f75489902f3a48495025729a0AF77d4b11e';
-const weth = '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2';
+const wethAddress = '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2';
 const uniswapRouter = '0x7a250d5630b4cf539739df2c5dacb4c659f2488d';
 const sushiswapRouter = '0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f';
 const usdtAddress = '0xdac17f958d2ee523a2206206994597c13d831ec7';
@@ -25,8 +30,8 @@ const gelatoCoreAddress = '0x025030bdaa159f281cae63873e68313a703725a5';
 const externalProviderAddress = '0x3d9A46b5D421bb097AC28B4f70a4A1441A12920C';
 const gnosisSafeProviderModuleAddress =
   '0x2E87AD9BBdaa9113cd5cA1920c624E2749D7086B';
-
-const { ethAddress, emptyHint } = require('./helper');
+const ethAddress = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
+const emptyHint = '0x';
 
 let lending;
 let swapImplementation;
@@ -39,7 +44,7 @@ let executor;
 let conditionTimeStateful;
 
 describe('test some simple trades', async () => {
-  before('test trade in uniswap curve', async () => {
+  before('tests', async () => {
     [admin, executor] = await ethers.getSigners();
     adminAddress = await admin.getAddress();
     const burnGasHelperFactory = await ethers.getContractFactory(
@@ -87,6 +92,14 @@ describe('test some simple trades', async () => {
       admin,
     );
 
+    gelatoCore = await ethers.getContractAt(GelatoCore.abi, gelatoCoreAddress);
+
+    const minExecutorStake = await gelatoCore.minExecutorStake();
+    await gelatoCore.connect(executor).stakeExecutor({
+      value: minExecutorStake,
+      gasLimit: 5000000,
+    });
+
     const conditionTimeStatefulFactory = await ethers.getContractFactory(
       'ConditionTimeStateful',
       admin,
@@ -98,7 +111,7 @@ describe('test some simple trades', async () => {
 
     // approve allowance
     await swapProxy.approveAllowances(
-      [weth, usdtAddress, usdcAddress, daiAddress],
+      [wethAddress, usdtAddress, usdcAddress, daiAddress],
       [kyberProxy, uniswapRouter, sushiswapRouter],
       false,
     );
@@ -120,16 +133,15 @@ describe('test some simple trades', async () => {
       daiAddress,
     ];
     for (let i = 0; i < tokenAddresses.length; i++) {
-      let token = await ethers.getContractAt(IERC20Ext.abi, tokenAddresses[i]);
+      let token = await ethers.getContractAt('IERC20Ext', tokenAddresses[i]);
       let val = ethers.utils.parseEther('100000');
       await token.approve(swapProxy.address, val.toString());
     }
   });
 
   it('trade e2t on kyber', async () => {
-    let tokenNames = ['USDT', 'USDC', 'DAI'];
     let tokenAddresses = [usdtAddress, usdcAddress, daiAddress];
-    // let tokenDecimals = [6, 6, 18];
+
     let ethAmount = ethers.utils.parseEther('1'); // one eth
     for (let i = 0; i < tokenAddresses.length; i++) {
       let token = tokenAddresses[i];
@@ -151,13 +163,10 @@ describe('test some simple trades', async () => {
         8,
         adminAddress,
         emptyHint,
-        false,
+        false, // without gas token
         { value: ethAmount.toString(), gasLimit: 2000000 },
       );
-      /* eslint-disable no-console */
-      console.log(
-        `[Kyber] Transaction ETH -> ${tokenNames[i]} without gas token`,
-      );
+
       await swapProxy.swapKyber(
         ethAddress,
         token,
@@ -167,25 +176,21 @@ describe('test some simple trades', async () => {
         8,
         adminAddress,
         emptyHint,
-        true,
+        true, // with gas token
         { value: ethAmount.toString(), gasLimit: 2000000 },
       );
-      /* eslint-disable no-console */
-      console.log(`[Kyber] Transaction ETH -> ${tokenNames[i]} with gas token`);
     }
   });
 
   it('trade e2t on Uniswap', async () => {
-    let tokenNames = ['USDT', 'USDC', 'DAI'];
     let tokenAddresses = [usdtAddress, usdcAddress, daiAddress];
     let routers = [uniswapRouter, sushiswapRouter];
-    let routerNames = ['Uniswap', 'Sushiswap'];
-    // let tokenDecimals = [6, 6, 18];
+
     let ethAmount = ethers.utils.parseEther('1'); // one eth
     for (let i = 0; i < routers.length; i++) {
       for (let j = 0; j < tokenAddresses.length; j++) {
         let token = tokenAddresses[j];
-        let tradePath = [weth, token]; // get rate needs to use weth
+        let tradePath = [wethAddress, token]; // get rate needs to use wethAddress
         let data = await swapProxy.getExpectedReturnUniswap(
           routers[i],
           ethAmount.toString(),
@@ -204,13 +209,10 @@ describe('test some simple trades', async () => {
           8,
           adminAddress,
           true,
-          false,
+          false, // without gas token
           { value: ethAmount.toString() },
         );
-        /* eslint-disable no-console */
-        console.log(
-          `[${routerNames[i]}] Transaction ETH -> ${tokenNames[j]} without gas token`,
-        );
+
         await swapProxy.swapUniswap(
           routers[i],
           ethAmount.toString(),
@@ -220,22 +222,18 @@ describe('test some simple trades', async () => {
           8,
           adminAddress,
           true,
-          true,
+          true, // with gas token
           { value: ethAmount.toString() },
-        );
-        /* eslint-disable no-console */
-        console.log(
-          `[${routerNames[i]}] Transaction ETH -> ${tokenNames[j]} with gas token`,
         );
       }
     }
   });
 
   it('trade t2e on kyber', async () => {
-    let tokenNames = ['USDT', 'USDC', 'DAI'];
     let tokenAddresses = [usdtAddress, usdcAddress, daiAddress];
+
     for (let i = 0; i < tokenAddresses.length; i++) {
-      let token = await ethers.getContractAt(IERC20Ext.abi, tokenAddresses[i]);
+      let token = await ethers.getContractAt('IERC20Ext', tokenAddresses[i]);
       let tokenAmount = Math.round((await token.balanceOf(adminAddress)) / 5);
       let data = await swapProxy.getExpectedReturnKyber(
         tokenAddresses[i],
@@ -255,12 +253,9 @@ describe('test some simple trades', async () => {
         8,
         adminAddress,
         emptyHint,
-        false,
+        false, //without gas token
       );
-      /* eslint-disable no-console */
-      console.log(
-        `[Kyber] Transaction ${tokenNames[i]} -> ETH without gas token`,
-      );
+
       await swapProxy.swapKyber(
         tokenAddresses[i],
         ethAddress,
@@ -270,26 +265,20 @@ describe('test some simple trades', async () => {
         8,
         adminAddress,
         emptyHint,
-        false,
+        false, // with gas token
       );
-      /* eslint-disable no-console */
-      console.log(`[Kyber] Transaction ${tokenNames[i]} -> ETH with gas token`);
     }
   });
 
   it('trade t2e on Uniswap', async () => {
-    let tokenNames = ['USDT', 'USDC', 'DAI'];
     let tokenAddresses = [usdtAddress, usdcAddress, daiAddress];
     let routers = [uniswapRouter, sushiswapRouter];
-    let routerNames = ['Uniswap', 'Sushiswap'];
+
     for (let i = 0; i < routers.length; i++) {
       for (let j = 0; j < tokenAddresses.length; j++) {
-        let token = await ethers.getContractAt(
-          IERC20Ext.abi,
-          tokenAddresses[j],
-        );
+        let token = await ethers.getContractAt('IERC20Ext', tokenAddresses[j]);
         let tokenAmount = Math.round((await token.balanceOf(adminAddress)) / 5);
-        let tradePath = [tokenAddresses[j], weth]; // get rate needs to use weth
+        let tradePath = [tokenAddresses[j], wethAddress]; // get rate needs to use wethAddress
         let data = await swapProxy.getExpectedReturnUniswap(
           routers[i],
           tokenAmount.toString(),
@@ -308,13 +297,10 @@ describe('test some simple trades', async () => {
           8,
           adminAddress,
           true,
-          false,
+          false, // without gas token
           { from: adminAddress },
         );
-        /* eslint-disable no-console */
-        console.log(
-          `[${routerNames[i]}] Transaction ${tokenNames[j]} -> ETH without gas token`,
-        );
+
         await swapProxy.swapUniswap(
           routers[i],
           tokenAmount.toString(),
@@ -324,33 +310,31 @@ describe('test some simple trades', async () => {
           8,
           adminAddress,
           true,
-          true,
+          true, // with gas token
           { from: adminAddress },
-        );
-        /* eslint-disable no-console */
-        console.log(
-          `[${routerNames[i]}] Transaction ${tokenNames[j]} -> ETH with gas token`,
         );
       }
     }
   });
 
-  it('integrate gelato with user proxy', async () => {
-    gelatoCore = await ethers.getContractAt(
-      gelato.GelatoCore.abi,
-      gelatoCoreAddress,
-      admin,
-    );
-
+  it('basic gelato integration (user proxy)', async () => {
     // Unlock Gelato Provider
-    let provider = await ethers.provider.getSigner(externalProviderAddress);
-    let providerAddress = await provider.getAddress();
+    let gelatoProvider = await ethers.provider.getSigner(
+      externalProviderAddress,
+    );
+    let gelatoProviderAddress = await gelatoProvider.getAddress();
 
     await network.provider.request({
       method: 'hardhat_impersonateAccount',
-      params: [providerAddress],
+      params: [gelatoProviderAddress],
     });
 
+    const myGelatoProvider = {
+      addr: gelatoProviderAddress,
+      module: gnosisSafeProviderModuleAddress,
+    };
+
+    // Set up User Proxy
     let cpk = await CPK.create({
       ethers,
       signer: admin,
@@ -364,112 +348,37 @@ describe('test some simple trades', async () => {
       },
     });
 
-    const minExecutorStake = await gelatoCore.minExecutorStake();
-    await gelatoCore.connect(executor).stakeExecutor({
-      value: minExecutorStake,
-      gasLimit: 5000000,
-    });
+    await enableGelatoCore(cpk, gelatoCoreAddress, CPK.CALL);
 
-    let ifaceGnoSafe = new ethers.utils.Interface([
-      'function enableModule(address)',
-    ]);
-
-    // Send some ETH To Proxy
-    await admin.sendTransaction({
-      to: cpk.address,
-      value: ethers.utils.parseEther('1'),
-    });
-
-    const enableModuleTx = await cpk.execTransactions(
-      [
-        {
-          to: cpk.address,
-          operation: CPK.CALL,
-          value: 0,
-          data: ifaceGnoSafe.encodeFunctionData('enableModule', [
-            gelatoCoreAddress,
-          ]),
-        },
-      ],
-      {
-        gasLimit: 5000000,
-      },
+    // Encode Task
+    const TWO_MINUTES = 120;
+    const usdc = await ethers.getContractAt('IERC20Ext', usdcAddress);
+    const tradeAmount = 5 * 10 ** 6; // 5 USDC
+    const { task, taskSpec } = await encodeStandardTaskCycle(
+      cpk,
+      swapProxy,
+      conditionTimeStateful,
+      usdc,
+      wethAddress,
+      tradeAmount,
+      TWO_MINUTES,
     );
 
-    await enableModuleTx.transactionResponse.wait();
+    // Set up Gelato Provider (whitelist Task Spec, provide funds)
+    const provideTaskSpecTx = await gelatoCore
+      .connect(gelatoProvider)
+      .multiProvide(
+        await executor.getAddress(), // executor
+        [taskSpec], // Task Specs
+        [myGelatoProvider.module], // Provider Module
+        {
+          value: ethers.utils.parseEther('5'),
+        },
+      );
+    await provideTaskSpecTx.wait();
 
-    const myGelatoProvider = {
-      addr: providerAddress,
-      module: gnosisSafeProviderModuleAddress,
-    };
-
-    const conditionEvery2minutes = new gelato.Condition({
-      inst: conditionTimeStateful.address,
-      data: await conditionTimeStateful.getConditionData(cpk.address),
-    });
-
-    let usdc = await ethers.getContractAt(IERC20Ext.abi, usdcAddress, admin);
-
-    const tradeAmount = (5 * 10 ** 6).toString();
+    // Submit Task Cylce
     const NUM_TRADES = 3;
-    const totalAmount = (NUM_TRADES * Number(tradeAmount)).toString();
-
-    const transferFromAction = new gelato.Action({
-      addr: usdc.address,
-      data: usdc.interface.encodeFunctionData('transferFrom', [
-        adminAddress,
-        cpk.address,
-        tradeAmount,
-      ]),
-      operation: gelato.Operation.Call,
-    });
-
-    const approveAction = new gelato.Action({
-      addr: usdc.address,
-      data: usdc.interface.encodeFunctionData('approve', [
-        swapProxy.address,
-        tradeAmount,
-      ]),
-      operation: gelato.Operation.Call,
-    });
-
-    const swapKyberAction = new gelato.Action({
-      addr: swapProxy.address,
-      data: swapProxy.interface.encodeFunctionData('swapKyber', [
-        usdcAddress,
-        weth,
-        tradeAmount,
-        0,
-        adminAddress,
-        8,
-        adminAddress,
-        emptyHint,
-        false,
-      ]),
-      operation: gelato.Operation.Call,
-    });
-    const TWO_MINUTES = 120;
-    const actionUpdateConditionTime = new gelato.Action({
-      addr: conditionTimeStateful.address,
-      data: conditionTimeStateful.interface.encodeFunctionData('setRefTime', [
-        TWO_MINUTES,
-        0,
-      ]),
-      operation: gelato.Operation.Call,
-    });
-
-    let task = new gelato.Task({
-      conditions: [conditionEvery2minutes],
-      actions: [
-        transferFromAction,
-        approveAction,
-        swapKyberAction,
-        actionUpdateConditionTime,
-      ],
-      selfProviderGasLimit: 0,
-      selfProviderGasPriceCeil: 0,
-    });
-
     const submitTaskCycleTx = await cpk.execTransactions(
       [
         {
@@ -479,7 +388,7 @@ describe('test some simple trades', async () => {
           data: gelatoCore.interface.encodeFunctionData('submitTaskCycle', [
             myGelatoProvider,
             [task],
-            999999999999,
+            999999999999, // timeout
             NUM_TRADES,
           ]),
         },
@@ -488,62 +397,30 @@ describe('test some simple trades', async () => {
         gasLimit: 5000000,
       },
     );
+    await submitTaskCycleTx.transactionResponse.wait();
 
-    let taskSubmitTxReceipt = await submitTaskCycleTx.transactionResponse.wait();
-    let currentGelatoId = await gelatoCore.currentTaskReceiptId();
-    let topics = gelatoCore.filters.LogTaskSubmitted(currentGelatoId).topics;
-    let filter = {
-      address: gelatoCore.address.toLowerCase(),
-      blockhash: taskSubmitTxReceipt.blockHash,
-      topics,
-    };
-    let logs = await admin.provider.getLogs(filter);
-    let log = logs.find(
-      (log) => log.transactionHash === taskSubmitTxReceipt.transactionHash,
-    );
-    let event = gelatoCore.interface.parseLog(log);
-    let taskReceipt = event.args.taskReceipt;
+    // Collect Gelato Task Receipt
+    let taskReceipt = await getSubmittedTaskReceipt(gelatoCore);
 
-    const taskSpec = new gelato.TaskSpec({
-      conditions: [task.conditions[0].inst],
-      actions: task.actions,
-      gasPriceCeil: 0,
-    });
+    // Approve User Proxy to spend user token
+    const totalApprove = (tradeAmount * NUM_TRADES).toString();
+    await usdc.approve(cpk.address, totalApprove);
 
-    // Provide Task Spec
-    const provideTaskSpecTx = await gelatoCore.connect(provider).multiProvide(
-      await executor.getAddress(), // executor
-      [taskSpec], // Task Specs
-      [gnosisSafeProviderModuleAddress], // Gnosis Safe provider Module
-      {
-        value: ethers.utils.parseEther('5'),
-      },
-    );
-    await provideTaskSpecTx.wait();
-
-    // approve proxy before exec
-    await usdc.approve(cpk.address, totalAmount);
-
-    const oracleAbi = ['function latestAnswer() view returns (int256)'];
-    const gelatoGasPriceOracleAddress = await gelatoCore.gelatoGasPriceOracle();
-
-    // Get gelatoGasPriceOracleAddress
-    const gelatoGasPriceOracle = await ethers.getContractAt(
-      oracleAbi,
-      gelatoGasPriceOracleAddress,
-      admin,
+    // Fetch Gelato Gas Price
+    const { gelatoGasPrice, gelatoMaxGas } = await getGelatoGasPrices(
+      gelatoCore,
     );
 
-    // lastAnswer is used by GelatoGasPriceOracle as well as the Chainlink Oracle
-    const gelatoGasPrice = await gelatoGasPriceOracle.latestAnswer();
-    const gelatoMaxGas = await gelatoCore.gelatoMaxGas();
-
+    // Simulate Task Cycle
     for (let i = 0; i < NUM_TRADES; i++) {
+      // Can execute? (should be OK)
       let canExecResult = await gelatoCore
         .connect(executor)
         .canExec(taskReceipt, gelatoMaxGas, gelatoGasPrice);
 
       expect(canExecResult).to.be.eq('OK');
+
+      // Executor executes
       await expect(
         gelatoCore.connect(executor).exec(taskReceipt, {
           gasPrice: gelatoGasPrice,
@@ -552,25 +429,19 @@ describe('test some simple trades', async () => {
       ).to.emit(gelatoCore, 'LogExecSuccess');
 
       if (i != NUM_TRADES - 1) {
-        const block = await admin.provider.getBlock();
-        currentGelatoId = await gelatoCore.currentTaskReceiptId();
-        topics = gelatoCore.filters.LogTaskSubmitted(currentGelatoId).topics;
-        filter = {
-          address: gelatoCore.address.toLowerCase(),
-          blockhash: block.hash,
-          topics,
-        };
-        logs = await admin.provider.getLogs(filter);
-        event = gelatoCore.interface.parseLog(logs[0]);
-        taskReceipt = event.args.taskReceipt;
+        // Collect next Task Receipt in cycle
+        taskReceipt = await getSubmittedTaskReceipt(gelatoCore);
 
+        // Can execute? (timestamp condition should block)
         canExecResult = await gelatoCore
           .connect(executor)
           .canExec(taskReceipt, gelatoMaxGas, gelatoGasPrice);
-
         expect(canExecResult).to.be.eq(
           'ConditionNotOk:NotOkTimestampDidNotPass',
         );
+
+        // Fast forward to next execution timestamp
+        const block = await admin.provider.getBlock();
         const executionTime = block.timestamp + TWO_MINUTES;
         await admin.provider.send('evm_mine', [executionTime]);
       }
