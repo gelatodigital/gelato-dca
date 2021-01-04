@@ -34,9 +34,12 @@ contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
     address internal constant _ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
     bytes internal constant _HINT = "0x";
 
+    uint256 public constant PLATFORM_FEE_BPS = 8;
+
     IOracleAggregator public immutable oracleAggregator;
     ISmartWalletSwapImplementation public immutable smartWalletSwap;
     address public immutable wethAddress;
+    address payable public platformWallet;
 
     struct OrderInputs {
         address _inToken;
@@ -53,7 +56,8 @@ contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
         IOracleAggregator _oracleAggregator,
         ISmartWalletSwapImplementation _smartWalletSwap,
         address _wethAddress,
-        address _executor
+        address _executor,
+        address payable _platformWallet
     )
         GelatoStatefulConditionsStandard(_gelatoCore)
         payable
@@ -61,6 +65,7 @@ contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
         oracleAggregator = _oracleAggregator;
         smartWalletSwap = _smartWalletSwap;
         wethAddress = _wethAddress;
+        platformWallet = _platformWallet;
 
         // One time Gelato Setup
         IGelatoCore(_gelatoCore).providerAssignsExecutor(_executor);
@@ -70,7 +75,6 @@ contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
         IGelatoCore(_gelatoCore).provideFunds{value: msg.value}(address(this));
     }
 
-    // solhint-disable-next-line function-max-lines
     function submitDCAKyber(
         OrderInputs calldata _orderInputs
     )
@@ -79,17 +83,25 @@ contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
     {
 
         // Update State Vars
-        setRefTime(_orderInputs._delay, msg.sender);
+        _setRefTime(_orderInputs._delay, msg.sender);
 
         uint256 previousUpcoming = totalToSpend[msg.sender][_orderInputs._inToken];
 
-        totalToSpend[msg.sender][_orderInputs._inToken] = previousUpcoming.add(_orderInputs._amountPerTrade).mul(_orderInputs._nTrades);
+        totalToSpend[msg.sender][_orderInputs._inToken] = 
+            previousUpcoming.add(_orderInputs._amountPerTrade).mul(_orderInputs._nTrades);
 
         // Submit Task Cycle to Gelato
         Provider memory provider =
             Provider({addr: address(this), module: address(this)});
 
-        Task[] memory tasks = getGelatoTasks(_orderInputs._inToken, _orderInputs._outToken, _orderInputs._amountPerTrade, _orderInputs._slippage, _orderInputs._delay, _orderInputs._gasPriceCeil);
+        Task[] memory tasks = _getGelatoTasks(
+            _orderInputs._inToken, 
+            _orderInputs._outToken, 
+            _orderInputs._amountPerTrade, 
+            _orderInputs._slippage, 
+            _orderInputs._delay, 
+            _orderInputs._gasPriceCeil
+        );
 
         gelatoCore.submitTaskCycle(provider, tasks, 0, _orderInputs._nTrades);
 
@@ -119,7 +131,7 @@ contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
         uint256 _delay
     ) external {
         // Update Condition
-        setRefTime(_delay, _user);
+        _setRefTime(_delay, _user);
 
         IERC20(_inToken).safeTransferFrom(_user, address(this), _amountPerTrade);
         IERC20(_inToken).safeApprove(address(smartWalletSwap), _amountPerTrade);
@@ -129,8 +141,8 @@ contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
             _amountPerTrade,
             0,
             _user,
-            8,
-            _user,
+            PLATFORM_FEE_BPS,
+            platformWallet,
             _HINT,
             false
         );
@@ -200,7 +212,8 @@ contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
         );
     }
 
-    function getGelatoTasks(
+    // solhint-disable-next-line function-max-lines
+    function _getGelatoTasks(
         address _inToken,
         address _outToken,
         uint256 _amountPerTrade,
@@ -208,8 +221,8 @@ contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
         uint256 _delay,
         uint256 _gasPriceCeil
     )
-        view
         private
+        view
         returns(Task[] memory tasks)
     {
         Condition memory condition =
@@ -268,6 +281,7 @@ contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
         returns(string memory)
     {
         uint256 _refTime = refTime[_user][_taskReceiptId];
+        // solhint-disable-next-line not-rely-on-time
         if (_refTime <= block.timestamp) {
             address oracleOutputToken = _outputToken;
             if (oracleOutputToken == wethAddress) {
@@ -283,7 +297,7 @@ contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
                 IERC20(_inputToken),
                 IERC20(_outputToken),
                 _amountPerTrade,
-                8,
+                PLATFORM_FEE_BPS,
                 _HINT
             );
             if (minReturn <= actualReturn) {
@@ -298,7 +312,7 @@ contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
 
     // ############# Private Methods #############
 
-    function setRefTime(uint256 _timeDelta, address _user) private {
+    function _setRefTime(uint256 _timeDelta, address _user) private {
         // solhint-disable-next-line not-rely-on-time
         uint256 currentTime = block.timestamp;
         uint256 newRefTime = currentTime.add(_timeDelta);
@@ -323,5 +337,11 @@ contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
         uint256 amount = IGelatoCore(gelatoCore).unprovideFunds(_amount);
         (bool success, ) = _dest.call{value: amount}("");
         require(success, "unprovideFunds:: Reverted");
+    }
+
+    function reAssignPlatforWallet (
+        address payable _platformWallet
+    ) external payable onlyOwner {
+        platformWallet = _platformWallet;
     }
 }
