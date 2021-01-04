@@ -65,7 +65,7 @@ module.exports = {
     compilers: [
       // Gelato contracts
       {
-        version: '0.8.0',
+        version: '0.7.0',
         settings: {
           optimizer: require('./solcOptimiserSettings.js'),
         },
