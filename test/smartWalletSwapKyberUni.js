@@ -1,4 +1,5 @@
 const { ethers, artifacts, network } = require('hardhat');
+const { utils, BigNumber } = ethers;
 const { expect } = require('chai');
 const { GelatoCore } = require('@gelatonetwork/core');
 const CPK = require('contract-proxy-kit');
@@ -14,23 +15,23 @@ const SmartWalletSwapImplementation = artifacts.readArtifactSync(
 const GasToken = artifacts.readArtifactSync('IGasToken');
 
 // mainnet addresses
-const kyberProxy = '0x9AAb3f75489902f3a48495025729a0AF77d4b11e';
-const wethAddress = '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2';
-const uniswapRouter = '0x7a250d5630b4cf539739df2c5dacb4c659f2488d';
-const sushiswapRouter = '0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f';
-const usdtAddress = '0xdac17f958d2ee523a2206206994597c13d831ec7';
-const usdcAddress = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48';
-const daiAddress = '0x6b175474e89094c44da98b954eedeac495271d0f';
-const gasTokenAddress = '0x0000000000b3F879cb30FE243b4Dfee438691c04';
-const masterCopy111Address = '0x34CfAC646f301356fAa8B21e94227e3583Fe3F5F';
-const cpkFactoryAddress = '0x0fB4340432e56c014fa96286de17222822a9281b';
-const multiSendAddress = '0xB522a9f781924eD250A11C54105E51840B138AdD';
-const fallbackHandlerAddress = '0x40A930851BD2e590Bd5A5C981b436de25742E980';
-const gelatoCoreAddress = '0x025030bdaa159f281cae63873e68313a703725a5';
-const externalProviderAddress = '0x3d9A46b5D421bb097AC28B4f70a4A1441A12920C';
+const kyberProxy = network.config.kyberProxy;
+const wethAddress = network.config.wethAddress;
+const uniswapRouter = network.config.uniswapRouter;
+const sushiswapRouter = network.config.sushiswapRouter;
+const usdtAddress = network.config.usdtAddress;
+const usdcAddress = network.config.usdcAddress;
+const daiAddress = network.config.daiAddress;
+const gasTokenAddress = network.config.gasTokenAddress;
+const masterCopy111Address = network.config.masterCopy111Address;
+const cpkFactoryAddress = network.config.cpkFactoryAddress;
+const multiSendAddress = network.config.multiSendAddress;
+const fallbackHandlerAddress = network.config.fallbackHandlerAddress;
+const gelatoCoreAddress = network.config.gelatoCoreAddress;
+const externalProviderAddress = network.config.externalProviderAddress;
 const gnosisSafeProviderModuleAddress =
-  '0x2E87AD9BBdaa9113cd5cA1920c624E2749D7086B';
-const ethAddress = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
+  network.config.gnosisSafeProviderModuleAddress;
+const ethAddress = network.config.ethAddress;
 const emptyHint = '0x';
 
 let lending;
@@ -322,15 +323,14 @@ describe('test some simple trades', async () => {
     let gelatoProvider = await ethers.provider.getSigner(
       externalProviderAddress,
     );
-    let gelatoProviderAddress = await gelatoProvider.getAddress();
 
     await network.provider.request({
       method: 'hardhat_impersonateAccount',
-      params: [gelatoProviderAddress],
+      params: [externalProviderAddress],
     });
 
     const myGelatoProvider = {
-      addr: gelatoProviderAddress,
+      addr: externalProviderAddress,
       module: gnosisSafeProviderModuleAddress,
     };
 
@@ -353,7 +353,7 @@ describe('test some simple trades', async () => {
     // Encode Task
     const TWO_MINUTES = 120;
     const usdc = await ethers.getContractAt('IERC20Ext', usdcAddress);
-    const tradeAmount = 5 * 10 ** 6; // 5 USDC
+    const tradeAmount = utils.parseUnits('5', '6'); // 5 USDC
     const { task, taskSpec } = await encodeStandardTaskCycle(
       cpk,
       swapProxy,
@@ -403,7 +403,7 @@ describe('test some simple trades', async () => {
     let taskReceipt = await getSubmittedTaskReceipt(gelatoCore);
 
     // Approve User Proxy to spend user token
-    const totalApprove = (tradeAmount * NUM_TRADES).toString();
+    const totalApprove = tradeAmount.mul(BigNumber.from(NUM_TRADES));
     await usdc.approve(cpk.address, totalApprove);
 
     // Fetch Gelato Gas Price

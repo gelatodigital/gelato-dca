@@ -14,6 +14,25 @@ if (!ALCHEMY_ID) {
   process.exit(0);
 }
 
+const addressList = {
+  kyberProxy: '0x9AAb3f75489902f3a48495025729a0AF77d4b11e',
+  wethAddress: '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2',
+  uniswapRouter: '0x7a250d5630b4cf539739df2c5dacb4c659f2488d',
+  sushiswapRouter: '0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f',
+  usdtAddress: '0xdac17f958d2ee523a2206206994597c13d831ec7',
+  usdcAddress: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+  daiAddress: '0x6b175474e89094c44da98b954eedeac495271d0f',
+  gasTokenAddress: '0x0000000000b3F879cb30FE243b4Dfee438691c04',
+  masterCopy111Address: '0x34CfAC646f301356fAa8B21e94227e3583Fe3F5F',
+  cpkFactoryAddress: '0x0fB4340432e56c014fa96286de17222822a9281b',
+  multiSendAddress: '0xB522a9f781924eD250A11C54105E51840B138AdD',
+  fallbackHandlerAddress: '0x40A930851BD2e590Bd5A5C981b436de25742E980',
+  gelatoCoreAddress: '0x025030bdaa159f281cae63873e68313a703725a5',
+  externalProviderAddress: '0x3d9A46b5D421bb097AC28B4f70a4A1441A12920C',
+  gnosisSafeProviderModuleAddress: '0x2E87AD9BBdaa9113cd5cA1920c624E2749D7086B',
+  ethAddress: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
+};
+
 module.exports = {
   defaultNetwork: 'hardhat',
   networks: {
@@ -22,6 +41,7 @@ module.exports = {
         url: `https://eth-mainnet.alchemyapi.io/v2/${ALCHEMY_ID}`,
         blockNumber: 11451429,
       },
+      ...addressList,
     },
     rinkeby: {
       // Standard
