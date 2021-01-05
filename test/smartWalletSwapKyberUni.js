@@ -9,6 +9,7 @@ const {
   getGelatoGasPrices,
   getAggregatedOracles,
   enableGelatoCore,
+  getTokenFromFaucet,
 } = require('./gelatoHelper');
 const SmartWalletSwapImplementation = artifacts.readArtifactSync(
   'SmartWalletSwapImplementation',
@@ -496,11 +497,18 @@ describe('test some simple trades', async () => {
     const TWO_MINUTES = 120;
     const NUM_TRADES = 3;
     const dai = await ethers.getContractAt('IERC20Ext', daiAddress);
-    const tradeAmount = utils.parseUnits('5', '18'); // 5 DAI
+    const tradeAmount = utils.parseUnits('1000', '18'); // 5 DAI
+
+    // Get DAI form faucet
+    await getTokenFromFaucet(
+      daiAddress,
+      adminAddress,
+      tradeAmount.mul(NUM_TRADES),
+    );
 
     const order = {
-      _inToken: dai.address,
-      _outToken: wethAddress,
+      _inToken: daiAddress,
+      _outToken: usdcAddress,
       _amountPerTrade: tradeAmount,
       _nTrades: NUM_TRADES,
       _slippage: 9000,
@@ -544,22 +552,22 @@ describe('test some simple trades', async () => {
       expect(canExecResult).to.be.eq('OK');
 
       // Executor executes
-      /*await expect(
+      await expect(
         gelatoCore.connect(executor).exec(taskReceipt, {
           gasPrice: gelatoGasPrice,
           gasLimit: 5000000,
         }),
-      ).to.emit(gelatoCore, 'LogExecSuccess');*/
-      const tx = await gelatoCore.connect(executor).exec(taskReceipt, {
-        gasPrice: gelatoGasPrice,
-        gasLimit: 5000000,
-      });
-      const r = await admin.provider.getTransactionReceipt(tx.hash);
-      /* eslint-disable no-console */
-      console.log(r.logs.length);
-      const event = gelatoCore.interface.parseLog(r.logs[0]);
-      /* eslint-disable no-console */
-      console.log(event);
+      ).to.emit(gelatoCore, 'LogExecSuccess');
+      // const tx = await gelatoCore.connect(executor).exec(taskReceipt, {
+      //   gasPrice: gelatoGasPrice,
+      //   gasLimit: 5000000,
+      // });
+      // const r = await admin.provider.getTransactionReceipt(tx.hash);
+      // /* eslint-disable no-console */
+      // console.log(r.logs.length);
+      // const event = gelatoCore.interface.parseLog(r.logs[0]);
+      // /* eslint-disable no-console */
+      // console.log(event);
 
       if (i != NUM_TRADES - 1) {
         // Collect next Task Receipt in cycle

@@ -20,6 +20,8 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IOracleAggregator} from "./interfaces/IOracleAggregator.sol";
 import {ISmartWalletSwapImplementation} from "./interfaces/ISmartWalletSwapImplementation.sol";
 
+import "hardhat/console.sol";
+
 
 contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
 
@@ -32,7 +34,7 @@ contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
     mapping(address => mapping(address => uint256)) public totalToSpend;
 
     address internal constant _ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
-    bytes internal constant _HINT = "0x";
+    bytes internal constant _HINT = "";
 
     uint256 public constant PLATFORM_FEE_BPS = 8;
 
@@ -87,7 +89,7 @@ contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
 
         uint256 previousUpcoming = totalToSpend[msg.sender][_orderInputs._inToken];
 
-        totalToSpend[msg.sender][_orderInputs._inToken] = 
+        totalToSpend[msg.sender][_orderInputs._inToken] =
             previousUpcoming.add(_orderInputs._amountPerTrade).mul(_orderInputs._nTrades);
 
         // Submit Task Cycle to Gelato
@@ -95,11 +97,11 @@ contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
             Provider({addr: address(this), module: address(this)});
 
         Task[] memory tasks = _getGelatoTasks(
-            _orderInputs._inToken, 
-            _orderInputs._outToken, 
-            _orderInputs._amountPerTrade, 
-            _orderInputs._slippage, 
-            _orderInputs._delay, 
+            _orderInputs._inToken,
+            _orderInputs._outToken,
+            _orderInputs._amountPerTrade,
+            _orderInputs._slippage,
+            _orderInputs._delay,
             _orderInputs._gasPriceCeil
         );
 
@@ -256,7 +258,7 @@ contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
             Task({
                 conditions: conditions,
                 actions: actions,
-                selfProviderGasLimit: 1000000, // allowing all actions to consume 1M gas
+                selfProviderGasLimit: 3000000, // allowing all actions to consume 3M gas
                 selfProviderGasPriceCeil: _gasPriceCeil
             });
         tasks = new Task[](1);
@@ -344,4 +346,7 @@ contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
     ) external payable onlyOwner {
         platformWallet = _platformWallet;
     }
+
+    // ############# Fallback #############
+    receive() external payable {}
 }
