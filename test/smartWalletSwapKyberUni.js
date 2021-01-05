@@ -495,7 +495,7 @@ describe('test some simple trades', async () => {
     const TWO_MINUTES = 120;
     const NUM_TRADES = 3;
     const dai = await ethers.getContractAt('IERC20Ext', daiAddress);
-    const tradeAmount = utils.parseUnits('5', '6'); // 5 USDC
+    const tradeAmount = utils.parseUnits('5', '18'); // 5 DAI
 
     const order = {
       _inToken: dai.address,
