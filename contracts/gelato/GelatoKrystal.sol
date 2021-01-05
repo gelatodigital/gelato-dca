@@ -37,7 +37,6 @@ contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
 
     IOracleAggregator public immutable oracleAggregator;
     ISmartWalletSwapImplementation public immutable smartWalletSwap;
-    address public immutable wethAddress;
     address payable public platformWallet;
 
     struct OrderInputs {
@@ -45,7 +44,8 @@ contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
         address _outToken;
         uint256 _amountPerTrade;
         uint256 _nTrades;
-        uint256 _slippage;
+        uint256 _minSlippage;
+        uint256 _maxSlippage;
         uint256 _delay;
         uint256 _gasPriceCeil;
     }
@@ -54,7 +54,6 @@ contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
         IGelatoCore _gelatoCore,
         IOracleAggregator _oracleAggregator,
         ISmartWalletSwapImplementation _smartWalletSwap,
-        address _wethAddress,
         address _executor,
         address payable _platformWallet
     )
@@ -63,7 +62,6 @@ contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
     {
         oracleAggregator = _oracleAggregator;
         smartWalletSwap = _smartWalletSwap;
-        wethAddress = _wethAddress;
         platformWallet = _platformWallet;
 
         // One time Gelato Setup
@@ -97,7 +95,8 @@ contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
             _orderInputs._inToken,
             _orderInputs._outToken,
             _orderInputs._amountPerTrade,
-            _orderInputs._slippage,
+            _orderInputs._minSlippage,
+            _orderInputs._maxSlippage,
             _orderInputs._delay,
             _orderInputs._gasPriceCeil
         );
@@ -166,15 +165,17 @@ contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
             address inputToken,
             address outputToken,
             uint256 amountPerTrade,
-            uint256 slippage
-        ) = abi.decode(_conditionData[36:], (address, address, address, uint256, uint256));
+            uint256 minSlippage,
+            uint256 maxSlippage
+        ) = abi.decode(_conditionData[36:], (address, address, address, uint256, uint256, uint256));
         return checkTimeAndReturn(
             _taskReceiptId,
             user,
             inputToken,
             outputToken,
             amountPerTrade,
-            slippage
+            minSlippage,
+            maxSlippage
         );
     }
 
@@ -193,7 +194,8 @@ contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
         address _inputToken,
         address _outputToken,
         uint256 _amountPerTrade,
-        uint256 _slippage
+        uint256 _minSlippage,
+        uint256 _maxSlippage
     )
         public
         pure
@@ -207,7 +209,8 @@ contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
             _inputToken,
             _outputToken,
             _amountPerTrade,
-            _slippage
+            _minSlippage,
+            _maxSlippage
         );
     }
 
@@ -216,7 +219,8 @@ contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
         address _inToken,
         address _outToken,
         uint256 _amountPerTrade,
-        uint256 _slippage,
+        uint256 _minSlippage,
+        uint256 _maxSlippage,
         uint256 _delay,
         uint256 _gasPriceCeil
     )
@@ -227,7 +231,7 @@ contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
         Condition memory condition =
             Condition({
                 inst: address(this),
-                data: getConditionData(msg.sender, _inToken, _outToken, _amountPerTrade, _slippage)
+                data: getConditionData(msg.sender, _inToken, _outToken, _amountPerTrade, _minSlippage, _maxSlippage)
             });
         Condition[] memory conditions = new Condition[](1);
         conditions[0] = condition;
@@ -272,7 +276,8 @@ contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
         address _inputToken,
         address _outputToken,
         uint256 _amountPerTrade,
-        uint256 _slippage
+        uint256 _minSlippage,
+        uint256 _maxSlippage
     )
         public
         view
@@ -289,20 +294,23 @@ contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
 
         // 3. Time Check
         uint256 _refTime = refTime[_user][_taskReceiptId];
+        // solhint-disable-next-line not-rely-on-time
         if (_refTime > block.timestamp) return "GelatoKrystsal: Time not passed";
 
         // 4. Rate Check
-        // solhint-disable-next-line not-rely-on-time
-        address oracleOutputToken = _outputToken;
-        if (oracleOutputToken == wethAddress) {
-            oracleOutputToken = _ETH_ADDRESS;
-        }
         (uint256 idealReturn,) = oracleAggregator.getExpectedReturnAmount(
             _amountPerTrade,
             _inputToken,
             _outputToken
         );
-        uint256 minReturn = idealReturn.sub(idealReturn.mul(_slippage).div(10000));
+        
+        // solhint-disable-next-line not-rely-on-time
+        uint256 slippage = _minSlippage - block.timestamp.sub(_refTime);
+        if (_maxSlippage > slippage) {
+            slippage = _maxSlippage;
+        }
+        
+        uint256 minReturn = idealReturn.sub(idealReturn.mul(slippage).div(10000));
         (uint256 actualReturn,) = smartWalletSwap.getExpectedReturnKyber(
             IERC20(_inputToken),
             IERC20(_outputToken),
@@ -354,5 +362,6 @@ contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
     }
 
     // ############# Fallback #############
+    // solhint-disable-next-line no-empty-blocks
     receive() external payable {}
 }

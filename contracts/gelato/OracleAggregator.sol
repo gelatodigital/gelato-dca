@@ -18,17 +18,21 @@ contract OracleAggregator is Ownable {
     // solhint-disable var-name-mixedcase
     address private constant _USD_ADDRESS = 0x7354C81fbCb229187480c4f497F945C6A312d5C3;
 
+    address public immutable wethAddress;
+
     mapping(address => mapping(address => address)) private _tokenPairAddress;
     mapping(address => uint256) private _nrOfDecimalsUSD;
 
     // solhint-disable function-max-lines
     constructor(
+        address _weth,
         address[] memory _tokensA, 
         address[] memory _tokensB, 
         address[] memory _oracles, 
         address[] memory _stablecoins, 
         uint256[] memory _decimals
     ) public {
+        wethAddress = _weth;
         addTokens(_tokensA, _tokensB, _oracles);
         addStablecoins(_stablecoins, _decimals);
     }
@@ -71,6 +75,12 @@ contract OracleAggregator is Ownable {
             tokenAddressB != address(0),
             "OracleAggregator: tokenAddressB is Zero"
         );
+        if (tokenAddressA == wethAddress) {
+            tokenAddressA = _ETH_ADDRESS;
+        }
+        if (tokenAddressB == wethAddress) {
+            tokenAddressB = _ETH_ADDRESS;
+        }
 
         uint256 nrOfDecimalsIn;
         if (tokenAddressA != _ETH_ADDRESS && tokenAddressA != _USD_ADDRESS) {

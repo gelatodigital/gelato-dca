@@ -43,6 +43,8 @@ let swapProxy;
 let burnGasHelper;
 let admin;
 let adminAddress;
+let gelatoUser;
+let gelatoUserAddress;
 let gelatoCore;
 let executor;
 let conditionTimeStateful;
@@ -51,8 +53,9 @@ let gelatoKrystal;
 
 describe('test some simple trades', async () => {
   before('tests', async () => {
-    [admin, executor] = await ethers.getSigners();
+    [admin, executor, gelatoUser] = await ethers.getSigners();
     adminAddress = await admin.getAddress();
+    gelatoUserAddress = await gelatoUser.getAddress();
 
     const burnGasHelperFactory = await ethers.getContractFactory(
       'BurnGasHelper',
@@ -131,6 +134,7 @@ describe('test some simple trades', async () => {
     );
 
     oracleAggregator = await oracleAggregatorFactory.deploy(
+      wethAddress,
       tokensA,
       tokensB,
       oracles,
@@ -147,7 +151,6 @@ describe('test some simple trades', async () => {
       gelatoCore.address,
       oracleAggregator.address,
       swapProxy.address,
-      wethAddress,
       await executor.getAddress(),
       adminAddress, // the platform wallet must be admin or it causes an error in the swap
       { value: ethers.utils.parseEther('10') },
@@ -497,12 +500,12 @@ describe('test some simple trades', async () => {
     const TWO_MINUTES = 120;
     const NUM_TRADES = 3;
     const dai = await ethers.getContractAt('IERC20Ext', daiAddress);
-    const tradeAmount = utils.parseUnits('1000', '18'); // 5 DAI
+    const tradeAmount = utils.parseUnits('1000', '18'); // 1000 DAI
 
     // Get DAI form faucet
     await getTokenFromFaucet(
       daiAddress,
-      adminAddress,
+      gelatoUserAddress,
       tradeAmount.mul(NUM_TRADES),
     );
 
@@ -511,12 +514,15 @@ describe('test some simple trades', async () => {
       _outToken: usdcAddress,
       _amountPerTrade: tradeAmount,
       _nTrades: NUM_TRADES,
-      _slippage: 9000,
+      _minSlippage: 9900, // starts at 1%
+      _maxSlippage: 9000, // max slippage of 10%
       _delay: TWO_MINUTES,
       _gasPriceCeil: 0,
     };
 
-    const submitTx = await gelatoKrystal.connect(admin).submitDCAKyber(order);
+    const submitTx = await gelatoKrystal
+      .connect(gelatoUser)
+      .submitDCAKyber(order);
     submitTx.wait();
 
     // Collect Gelato Task Receipt
@@ -524,7 +530,7 @@ describe('test some simple trades', async () => {
 
     // Approve User Proxy to spend user token
     const totalApprove = tradeAmount.mul(BigNumber.from(NUM_TRADES));
-    await dai.connect(admin).approve(gelatoKrystal.address, totalApprove);
+    await dai.connect(gelatoUser).approve(gelatoKrystal.address, totalApprove);
 
     // Fetch Gelato Gas Price
     const { gelatoGasPrice, gelatoMaxGas } = await getGelatoGasPrices(
