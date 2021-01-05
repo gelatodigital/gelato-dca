@@ -7,7 +7,9 @@ const {
   encodeStandardTaskCycle,
   getSubmittedTaskReceipt,
   getGelatoGasPrices,
+  getAggregatedOracles,
   enableGelatoCore,
+  getTokenFromFaucet,
 } = require('./gelatoHelper');
 const SmartWalletSwapImplementation = artifacts.readArtifactSync(
   'SmartWalletSwapImplementation',
@@ -15,23 +17,24 @@ const SmartWalletSwapImplementation = artifacts.readArtifactSync(
 const GasToken = artifacts.readArtifactSync('IGasToken');
 
 // mainnet addresses
-const kyberProxy = network.config.kyberProxy;
-const wethAddress = network.config.wethAddress;
-const uniswapRouter = network.config.uniswapRouter;
-const sushiswapRouter = network.config.sushiswapRouter;
-const usdtAddress = network.config.usdtAddress;
-const usdcAddress = network.config.usdcAddress;
-const daiAddress = network.config.daiAddress;
-const gasTokenAddress = network.config.gasTokenAddress;
-const masterCopy111Address = network.config.masterCopy111Address;
-const cpkFactoryAddress = network.config.cpkFactoryAddress;
-const multiSendAddress = network.config.multiSendAddress;
-const fallbackHandlerAddress = network.config.fallbackHandlerAddress;
-const gelatoCoreAddress = network.config.gelatoCoreAddress;
-const externalProviderAddress = network.config.externalProviderAddress;
+const kyberProxy = network.config.addresses.kyberProxy;
+const wethAddress = network.config.addresses.wethAddress;
+const uniswapRouter = network.config.addresses.uniswapRouter;
+const sushiswapRouter = network.config.addresses.sushiswapRouter;
+const usdtAddress = network.config.addresses.usdtAddress;
+const usdcAddress = network.config.addresses.usdcAddress;
+const daiAddress = network.config.addresses.daiAddress;
+const gasTokenAddress = network.config.addresses.gasTokenAddress;
+const masterCopy111Address = network.config.addresses.masterCopy111Address;
+const cpkFactoryAddress = network.config.addresses.cpkFactoryAddress;
+const multiSendAddress = network.config.addresses.multiSendAddress;
+const fallbackHandlerAddress = network.config.addresses.fallbackHandlerAddress;
+const gelatoCoreAddress = network.config.addresses.gelatoCoreAddress;
+const externalProviderAddress =
+  network.config.addresses.externalProviderAddress;
 const gnosisSafeProviderModuleAddress =
-  network.config.gnosisSafeProviderModuleAddress;
-const ethAddress = network.config.ethAddress;
+  network.config.addresses.gnosisSafeProviderModuleAddress;
+const ethAddress = network.config.addresses.ethAddress;
 const emptyHint = '0x';
 
 let lending;
@@ -40,14 +43,20 @@ let swapProxy;
 let burnGasHelper;
 let admin;
 let adminAddress;
+let gelatoUser;
+let gelatoUserAddress;
 let gelatoCore;
 let executor;
 let conditionTimeStateful;
+let oracleAggregator;
+let gelatoKrystal;
 
 describe('test some simple trades', async () => {
   before('tests', async () => {
-    [admin, executor] = await ethers.getSigners();
+    [admin, executor, gelatoUser] = await ethers.getSigners();
     adminAddress = await admin.getAddress();
+    gelatoUserAddress = await gelatoUser.getAddress();
+
     const burnGasHelperFactory = await ethers.getContractFactory(
       'BurnGasHelper',
       admin,
@@ -110,12 +119,50 @@ describe('test some simple trades', async () => {
       gelatoCoreAddress,
     );
 
+    const { chainId } = await admin.provider.getNetwork();
+    const {
+      tokensA,
+      tokensB,
+      oracles,
+      stablecoins,
+      decimals,
+    } = getAggregatedOracles(chainId);
+
+    const oracleAggregatorFactory = await ethers.getContractFactory(
+      'OracleAggregator',
+      admin,
+    );
+
+    oracleAggregator = await oracleAggregatorFactory.deploy(
+      wethAddress,
+      tokensA,
+      tokensB,
+      oracles,
+      stablecoins,
+      decimals,
+    );
+
+    const gelatoKrystalFactory = await ethers.getContractFactory(
+      'GelatoKrystal',
+      admin,
+    );
+
+    gelatoKrystal = await gelatoKrystalFactory.deploy(
+      gelatoCore.address,
+      oracleAggregator.address,
+      swapProxy.address,
+      await executor.getAddress(),
+      adminAddress, // the platform wallet must be admin or it causes an error in the swap
+      { value: ethers.utils.parseEther('10') },
+    );
+
     // approve allowance
     await swapProxy.approveAllowances(
       [wethAddress, usdtAddress, usdcAddress, daiAddress],
       [kyberProxy, uniswapRouter, sushiswapRouter],
       false,
     );
+
     // update storage data
     await swapProxy.updateLendingImplementation(lending.address);
     await swapProxy.updateSupportedPlatformWallets([adminAddress], true);
@@ -444,6 +491,95 @@ describe('test some simple trades', async () => {
         const block = await admin.provider.getBlock();
         const executionTime = block.timestamp + TWO_MINUTES;
         await admin.provider.send('evm_mine', [executionTime]);
+      }
+    }
+  });
+
+  it('gelato integration (use GelatoKyber)', async () => {
+    // Encode Task
+    const TWO_MINUTES = 120;
+    const NUM_TRADES = 3;
+    const dai = await ethers.getContractAt('IERC20Ext', daiAddress);
+    const tradeAmount = utils.parseUnits('1000', '18'); // 1000 DAI
+
+    // Get DAI form faucet
+    await getTokenFromFaucet(
+      daiAddress,
+      gelatoUserAddress,
+      tradeAmount.mul(NUM_TRADES),
+    );
+
+    const order = {
+      _inToken: daiAddress,
+      _outToken: usdcAddress,
+      _amountPerTrade: tradeAmount,
+      _nTrades: NUM_TRADES,
+      _minSlippage: 9900, // starts at 1%
+      _maxSlippage: 9000, // max slippage of 10%
+      _delay: TWO_MINUTES,
+      _gasPriceCeil: 0,
+    };
+
+    const submitTx = await gelatoKrystal
+      .connect(gelatoUser)
+      .submitDCAKyber(order);
+    submitTx.wait();
+
+    // Collect Gelato Task Receipt
+    let taskReceipt = await getSubmittedTaskReceipt(gelatoCore);
+
+    // Approve User Proxy to spend user token
+    const totalApprove = tradeAmount.mul(BigNumber.from(NUM_TRADES));
+    await dai.connect(gelatoUser).approve(gelatoKrystal.address, totalApprove);
+
+    // Fetch Gelato Gas Price
+    const { gelatoGasPrice, gelatoMaxGas } = await getGelatoGasPrices(
+      gelatoCore,
+    );
+
+    // Simulate Task Cycle
+    for (let i = 0; i < NUM_TRADES; i++) {
+      // Can execute? (timestamp condition should block)
+      let canExecResult = await gelatoCore
+        .connect(executor)
+        .canExec(taskReceipt, gelatoMaxGas, gelatoGasPrice);
+      expect(canExecResult).to.be.eq(
+        'ConditionNotOk:GelatoKrystsal: Time not passed',
+      );
+
+      // Fast forward to next execution timestamp
+      const block = await admin.provider.getBlock();
+      const executionTime = block.timestamp + TWO_MINUTES;
+      await admin.provider.send('evm_mine', [executionTime]);
+
+      // Can execute? (should be OK)
+      canExecResult = await gelatoCore
+        .connect(executor)
+        .canExec(taskReceipt, gelatoMaxGas, gelatoGasPrice);
+
+      expect(canExecResult).to.be.eq('OK');
+
+      // Executor executes
+      await expect(
+        gelatoCore.connect(executor).exec(taskReceipt, {
+          gasPrice: gelatoGasPrice,
+          gasLimit: 5000000,
+        }),
+      ).to.emit(gelatoCore, 'LogExecSuccess');
+      // const tx = await gelatoCore.connect(executor).exec(taskReceipt, {
+      //   gasPrice: gelatoGasPrice,
+      //   gasLimit: 5000000,
+      // });
+      // const r = await admin.provider.getTransactionReceipt(tx.hash);
+      // /* eslint-disable no-console */
+      // console.log(r.logs.length);
+      // const event = gelatoCore.interface.parseLog(r.logs[0]);
+      // /* eslint-disable no-console */
+      // console.log(event);
+
+      if (i != NUM_TRADES - 1) {
+        // Collect next Task Receipt in cycle
+        taskReceipt = await getSubmittedTaskReceipt(gelatoCore);
       }
     }
   });

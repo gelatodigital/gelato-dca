@@ -4,4 +4,4 @@ contracts/exchange
 contracts/interfaces
 contracts/lending
 contracts/wrappers
-contracts/gelato/ConditionTimeStateful.sol
+contracts/gelato
