@@ -537,7 +537,9 @@ describe('test some simple trades', async () => {
       let canExecResult = await gelatoCore
         .connect(executor)
         .canExec(taskReceipt, gelatoMaxGas, gelatoGasPrice);
-      expect(canExecResult).to.be.eq('ConditionNotOk:NotOkTimestampDidNotPass');
+      expect(canExecResult).to.be.eq(
+        'ConditionNotOk:GelatoKrystsal: Time not passed',
+      );
 
       // Fast forward to next execution timestamp
       const block = await admin.provider.getBlock();

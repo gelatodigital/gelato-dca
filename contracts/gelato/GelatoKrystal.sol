@@ -279,34 +279,43 @@ contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
         virtual
         returns(string memory)
     {
+        // 1. Balance Check
+        uint256 balance = IERC20(_inputToken).balanceOf(_user);
+        if (balance < _amountPerTrade) return "GelatoKrystsal: Insufficient balance";
+
+        // 2. Approval Check
+        uint256 allowance = IERC20(_inputToken).allowance(_user, address(this));
+        if (allowance < _amountPerTrade) return "GelatoKrystsal: Insufficient allowance";
+
+        // 3. Time Check
         uint256 _refTime = refTime[_user][_taskReceiptId];
+        if (_refTime > block.timestamp) return "GelatoKrystsal: Time not passed";
+
+        // 4. Rate Check
         // solhint-disable-next-line not-rely-on-time
-        if (_refTime <= block.timestamp) {
-            address oracleOutputToken = _outputToken;
-            if (oracleOutputToken == wethAddress) {
-                oracleOutputToken = _ETH_ADDRESS;
-            }
-            (uint256 idealReturn,) = oracleAggregator.getExpectedReturnAmount(
-                _amountPerTrade,
-                _inputToken,
-                _outputToken
-            );
-            uint256 minReturn = idealReturn.sub(idealReturn.mul(_slippage).div(10000));
-            (uint256 actualReturn,) = smartWalletSwap.getExpectedReturnKyber(
-                IERC20(_inputToken),
-                IERC20(_outputToken),
-                _amountPerTrade,
-                PLATFORM_FEE_BPS,
-                _HINT
-            );
-            if (minReturn <= actualReturn) {
-                return OK;
-            } else {
-                return "TimePassedButExpectedReturnTooLow";
-            }
-        } else {
-            return "NotOkTimestampDidNotPass";
+        address oracleOutputToken = _outputToken;
+        if (oracleOutputToken == wethAddress) {
+            oracleOutputToken = _ETH_ADDRESS;
         }
+        (uint256 idealReturn,) = oracleAggregator.getExpectedReturnAmount(
+            _amountPerTrade,
+            _inputToken,
+            _outputToken
+        );
+        uint256 minReturn = idealReturn.sub(idealReturn.mul(_slippage).div(10000));
+        (uint256 actualReturn,) = smartWalletSwap.getExpectedReturnKyber(
+            IERC20(_inputToken),
+            IERC20(_outputToken),
+            _amountPerTrade,
+            PLATFORM_FEE_BPS,
+            _HINT
+        );
+
+        if (minReturn > actualReturn) return "GelatoKrystsal: TimePassedButExpectedReturnTooLow";
+
+        // If all checks passed
+        return OK;
+
     }
 
     // ############# Private Methods #############
