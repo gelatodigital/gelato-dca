@@ -20,9 +20,6 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IOracleAggregator} from "./interfaces/IOracleAggregator.sol";
 import {ISmartWalletSwapImplementation} from "./interfaces/ISmartWalletSwapImplementation.sol";
 
-import "hardhat/console.sol";
-
-
 contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
 
     using SafeERC20 for IERC20;
