@@ -148,7 +148,7 @@ describe('test some simple trades', async () => {
       swapProxy.address,
       wethAddress,
       await executor.getAddress(),
-      adminAddress,
+      adminAddress, // the platform wallet must be admin or it causes an error in the swap
       { value: ethers.utils.parseEther('10') },
     );
 
@@ -490,6 +490,7 @@ describe('test some simple trades', async () => {
       }
     }
   });
+
   it('gelato integration (use GelatoKyber)', async () => {
     // Encode Task
     const TWO_MINUTES = 120;
@@ -507,7 +508,7 @@ describe('test some simple trades', async () => {
       _gasPriceCeil: 0,
     };
 
-    const submitTx = await gelatoKrystal.submitDCAKyber(order);
+    const submitTx = await gelatoKrystal.connect(admin).submitDCAKyber(order);
     submitTx.wait();
 
     // Collect Gelato Task Receipt
@@ -515,7 +516,7 @@ describe('test some simple trades', async () => {
 
     // Approve User Proxy to spend user token
     const totalApprove = tradeAmount.mul(BigNumber.from(NUM_TRADES));
-    await dai.approve(gelatoKrystal.address, totalApprove);
+    await dai.connect(admin).approve(gelatoKrystal.address, totalApprove);
 
     // Fetch Gelato Gas Price
     const { gelatoGasPrice, gelatoMaxGas } = await getGelatoGasPrices(
