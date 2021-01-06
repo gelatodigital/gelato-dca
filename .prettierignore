@@ -1,0 +1,11 @@
+packages/hardhat/build/
+node_modules/
+packages/hardhat/internals/generators/
+packages/hardhat/internals/scripts/
+yarn.lock
+package.json
+packages/hardhat/artifacts/
+packages/hardhat/cache/
+packages/hardhat/contracts/
+packages/hardhat/deploy/
+packages/hardhat/scripts/

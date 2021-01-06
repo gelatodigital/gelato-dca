@@ -1,0 +1,5 @@
+packages/hardhat/cache/
+packages/hardhat/deploy/
+packages/hardhat/scripts/
+packages/contracts/
+packages/react-ui/
