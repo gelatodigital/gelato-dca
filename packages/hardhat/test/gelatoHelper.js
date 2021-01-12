@@ -147,8 +147,8 @@ module.exports.getGelatoGasPrices = async (gelatoCore) => {
   return { gelatoGasPrice, gelatoMaxGas };
 };
 
-module.exports.getAggregatedOracles = (chainId) => {
-  if (chainId == 31337 || chainId == 1) {
+module.exports.getAggregatedOracles = () => {
+  if (network.name == 'hardhat' || network.name == 'mainnet') {
     const stablecoins = [
       network.config.addresses.usdAddress,
       network.config.addresses.usdcAddress,
@@ -225,7 +225,7 @@ module.exports.getAggregatedOracles = (chainId) => {
     return { tokensA, tokensB, oracles, stablecoins, decimals };
   }
 
-  if (chainId == 3) {
+  if (network.name == 'ropsten') {
     const stablecoins = [
       network.config.addresses.usdAddress,
       network.config.addresses.daiAddress,
@@ -235,7 +235,7 @@ module.exports.getAggregatedOracles = (chainId) => {
 
     const oracleTokens = [
       network.config.addresses.ethAddress,
-      network.config.addresses.daiAddress,
+      network.config.addresses.usdAddress,
     ];
     let tokensA = [];
     let tokensB = [];

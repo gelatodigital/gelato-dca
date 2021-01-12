@@ -12,15 +12,13 @@ module.exports = async (hre) => {
   const { deployments } = hre;
   const { deploy } = deployments;
   const { deployer } = await hre.getNamedAccounts();
-  const [signer] = await hre.ethers.getSigners();
-  const { chainId } = await signer.provider.getNetwork();
   const {
     tokensA,
     tokensB,
     oracles,
     stablecoins,
     decimals,
-  } = await getAggregatedOracles(chainId);
+  } = await getAggregatedOracles();
 
   await deploy('OracleAggregator', {
     from: deployer,

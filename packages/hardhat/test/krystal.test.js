@@ -129,7 +129,6 @@ describe('test Krystal simple trades', async () => {
         emptyHint,
       );
       let minRate = (data.expectedRate * 97) / 100;
-
       await swapProxy.swapKyber(
         ethAddress,
         token,
