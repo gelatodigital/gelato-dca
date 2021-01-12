@@ -163,6 +163,7 @@ module.exports.getAggregatedOracles = () => {
 
     const oracleTokens = [
       network.config.addresses.ethAddress,
+      network.config.addresses.usdAddress,
       network.config.addresses.aaveAddress,
       network.config.addresses.adxAddress,
       network.config.addresses.batAddress,
