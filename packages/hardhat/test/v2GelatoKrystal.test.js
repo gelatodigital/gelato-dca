@@ -155,13 +155,13 @@ describe('test Krystal with Gelato V2 - No Gelato Core', async () => {
 
     // Simulate Task Cycle
     for (let i = 0; i < NUM_TRADES; i++) {
-      let canExec = false;
+      let canExec = true;
       try {
         await gelatoKrystal.connect(executor).canExec(order, user, id);
       } catch(_e) {
-        canExec = true;
+        canExec = false;
       }
-      expect(canExec).to.be.eq(true);
+      expect(canExec).to.be.eq(false); // Q: do you prefer that this never reverts and always returns a string value instead ??
 
       // Fast forward to next execution timestamp
       const block = await admin.provider.getBlock();
