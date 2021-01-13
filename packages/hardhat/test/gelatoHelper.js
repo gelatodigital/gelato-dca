@@ -129,6 +129,23 @@ module.exports.getSubmittedTaskReceipt = async (gelatoCore) => {
   return event.args.taskReceipt;
 };
 
+module.exports.getSubmittedTaskV2 = async (gelatoKrystal) => {
+  const block = await ethers.provider.getBlock();
+  const currentTaskId = await gelatoKrystal.currentTaskId();
+  const topics = gelatoKrystal.filters.LogTaskSubmitted(currentTaskId).topics;
+  const filter = {
+    address: gelatoKrystal.address.toLowerCase(),
+    blockhash: block.hash,
+    topics,
+  };
+  const logs = await ethers.provider.getLogs(filter);
+  if (logs.length != 1) {
+    throw Error('cannot find unique task receipt');
+  }
+  const event = gelatoKrystal.interface.parseLog(logs[0]);
+  return event.args;
+};
+
 module.exports.getGelatoGasPrices = async (gelatoCore) => {
   const oracleAbi = ['function latestAnswer() view returns (int256)'];
   const gelatoGasPriceOracleAddress = await gelatoCore.gelatoGasPriceOracle();
@@ -146,6 +163,18 @@ module.exports.getGelatoGasPrices = async (gelatoCore) => {
 
   return { gelatoGasPrice, gelatoMaxGas };
 };
+
+module.exports.getGelatoGasPriceV2 = async (gasPriceOracleAddress) => {
+  const oracleAbi = ['function latestAnswer() view returns (int256)'];
+
+  // Get gelatoGasPriceOracleAddress
+  const gelatoGasPriceOracle = await ethers.getContractAt(
+    oracleAbi,
+    gasPriceOracleAddress,
+  );
+
+  return await gelatoGasPriceOracle.latestAnswer();
+}
 
 module.exports.getAggregatedOracles = () => {
   if (network.name == 'hardhat' || network.name == 'mainnet') {

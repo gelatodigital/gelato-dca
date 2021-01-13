@@ -30,6 +30,7 @@ const mainnetAddresses = {
   gelatoCoreAddress: '0x025030bdaa159f281cae63873e68313a703725a5',
   externalProviderAddress: '0x3d9A46b5D421bb097AC28B4f70a4A1441A12920C',
   gnosisSafeProviderModuleAddress: '0x2E87AD9BBdaa9113cd5cA1920c624E2749D7086B',
+  gasPriceOracleAddress: '0x169E633A2D1E6c10dD91238Ba11c4A708dfEF37C',
   ethAddress: ETH_ADDRESS,
   usdAddress: USD_ADDRESS,
   aaveAddress: "0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9",
