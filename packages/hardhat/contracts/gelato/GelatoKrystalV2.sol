@@ -7,7 +7,6 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IOracleAggregator} from "./interfaces/IOracleAggregator.sol";
 import {IGasPriceOracle} from "./interfaces/IGasPriceOracle.sol";
 import {ISmartWalletSwapImplementation} from "./interfaces/ISmartWalletSwapImplementation.sol";
-import "hardhat/console.sol";
 
 contract GelatoKrystalV2 is Ownable {
 
@@ -46,7 +45,7 @@ contract GelatoKrystalV2 is Ownable {
     bytes internal constant _HINT = "";
     uint256 public constant PLATFORM_FEE_BPS = 8;
     bytes32 internal constant EXECUTED = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff; 
-    uint256 public constant GAS_OVERHEAD = 50000;
+    uint256 public constant GAS_OVERHEAD = 100000; // TODO: get more accurate overhead estimate
     uint256 public taskId;
 
     IOracleAggregator public immutable oracleAggregator;
@@ -107,6 +106,7 @@ contract GelatoKrystalV2 is Ownable {
     {
         // gas measurement
         uint256 gasStart = gasleft();
+
         // verify task submitted and gas price
         _canExec(_order, _user, _id);
 
@@ -149,7 +149,7 @@ contract GelatoKrystalV2 is Ownable {
             _updateAndSubmitTask(_order, _user, _id);
         }
         emit LogExecSuccess(_id, executorModule);
-        uint256 gasFeeEth = gasStart.sub(gasleft()).add(GAS_OVERHEAD).mul(fetchCurrentGasPrice());
+        uint256 gasFeeEth = gasStart.sub(gasleft()).add(GAS_OVERHEAD).mul(fetchCurrentGasPrice()); // TODO: Add gelato profit / more overhead for gas bump ??
         (uint256 gasFeeToken,) = oracleAggregator.getExpectedReturnAmount(
             gasFeeEth,
             _ETH_ADDRESS,
