@@ -69,10 +69,7 @@ export const Image = styled.img`
   pointer-events: none;
 `;
 
-export const HyperLink = styled.a.attrs({
-  target: '_blank',
-  rel: 'noopener noreferrer',
-})`
+export const Page = styled.div`
   color: #483d8b;
   margin: 0px 20px;
   padding: 12px 24px;

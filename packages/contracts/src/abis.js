@@ -1,7 +1,5 @@
 const GelatoKrystal = require('./abis/GelatoKrystal.json');
 
-const abis = {
+module.exports = {
   GelatoKrystalAbi: GelatoKrystal.abi,
 };
-
-module.exports.abis;

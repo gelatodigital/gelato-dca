@@ -17,7 +17,18 @@ export const getMiniUserAddress = async (provider) => {
 
 export const getGelatoKrystal = async (user) => {
   const signer = await user.getSigner();
-  return new ethers.Contract(GELATO_KRYSTAL, GelatoKrystalAbi, signer);
+  let gelatoKrystalContract;
+  try {
+    gelatoKrystalContract = new ethers.Contract(
+      GELATO_KRYSTAL,
+      GelatoKrystalAbi,
+      signer,
+    );
+  } catch (err) {
+    console.log(err);
+    throw Error('Cannot instantiate GelatoKrystal');
+  }
+  return gelatoKrystalContract;
 };
 
 export const getGelatoGasPrice = async (user) => {

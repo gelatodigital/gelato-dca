@@ -6,7 +6,7 @@ import SubmitTask from './pages/SubmitTask';
 import TaskOverview from './pages/TaskOverview';
 import GelatoLogo from './components/Logo';
 
-import { Body, Button, Header, HyperLink, CardWrapper } from './components';
+import { Body, Button, Header, Page, CardWrapper } from './components';
 
 import { web3Modal, logoutOfWeb3Modal } from './utils/web3Modal';
 
@@ -71,42 +71,42 @@ function App() {
           </div>
           {userAccount && userAddress && (
             <>
-              <HyperLink>
+              <Page>
                 <Link
                   style={{
                     color: '#483D8B',
                     textDecoration: 'none',
-                    'font-weight': 'bold',
+                    fontWeight: 'bold',
                   }}
                   to="/"
                 >
                   User
                 </Link>
-              </HyperLink>
-              <HyperLink>
+              </Page>
+              <Page>
                 <Link
                   style={{
                     color: '#483D8B',
                     textDecoration: 'none',
-                    'font-weight': 'bold',
+                    fontWeight: 'bold',
                   }}
                   to="/submit-task"
                 >
                   Submit Task
                 </Link>
-              </HyperLink>
-              <HyperLink>
+              </Page>
+              <Page>
                 <Link
                   style={{
                     color: '#483D8B',
                     textDecoration: 'none',
-                    'font-weight': 'bold',
+                    fontWeight: 'bold',
                   }}
                   to="/task-overview"
                 >
                   Task Overview
                 </Link>
-              </HyperLink>
+              </Page>
             </>
           )}
           <WalletButton

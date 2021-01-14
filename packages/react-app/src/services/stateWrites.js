@@ -37,6 +37,7 @@ export const submitOrder = async (
     await submitTx.wait();
   } catch (err) {
     console.log(err);
+    console.log('Submit DCA Kyber failed');
   }
 };
 
