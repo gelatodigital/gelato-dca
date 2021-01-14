@@ -74,14 +74,13 @@ describe('test Krystal with Gelato', async () => {
       gasLimit: 5000000,
     });
 
-    const { chainId } = await admin.provider.getNetwork();
     const {
       tokensA,
       tokensB,
       oracles,
       stablecoins,
       decimals,
-    } = getAggregatedOracles(chainId);
+    } = getAggregatedOracles();
 
     const oracleAggregatorFactory = await ethers.getContractFactory(
       'OracleAggregator',

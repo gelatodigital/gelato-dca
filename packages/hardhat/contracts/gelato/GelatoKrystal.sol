@@ -129,6 +129,7 @@ contract GelatoKrystal is GelatoStatefulConditionsStandard, Ownable {
         uint256 _delay
     ) external {
         // Update Condition
+        require(msg.sender == address(gelatoCore));
         _setRefTime(_delay, _user);
 
         IERC20(_inToken).safeTransferFrom(_user, address(this), _amountPerTrade);
