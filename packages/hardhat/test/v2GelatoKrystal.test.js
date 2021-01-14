@@ -1,6 +1,7 @@
 const { ethers, artifacts, network } = require('hardhat');
 const { utils, BigNumber } = ethers;
 const { expect } = require('chai');
+const { ok } = require('./canExec');
 const {
   getSubmittedTaskV2,
   getGelatoGasPriceV2,
@@ -155,13 +156,8 @@ describe('test Krystal with Gelato V2 - No Gelato Core', async () => {
 
     // Simulate Task Cycle
     for (let i = 0; i < NUM_TRADES; i++) {
-      let canExec = true;
-      try {
-        await gelatoKrystal.connect(executor).canExec(order, user, id);
-      } catch(_e) {
-        canExec = false;
-      }
-      expect(canExec).to.be.eq(false); // Q: do you prefer that this never reverts and always returns a string value instead ??
+      let canExecResult = await ok(executor, gelatoKrystal.address, gelatoKrystal.interface, 'canExec', [order, user, id]);
+      expect(canExecResult).to.be.eq("NOT OK");
 
       // Fast forward to next execution timestamp
       const block = await admin.provider.getBlock();
@@ -169,9 +165,7 @@ describe('test Krystal with Gelato V2 - No Gelato Core', async () => {
       await admin.provider.send('evm_mine', [executionTime]);
 
       // Can execute? (should be OK)
-      let canExecResult = await gelatoKrystal
-        .connect(executor)
-        .canExec(order, user, id);
+      canExecResult = await ok(executor, gelatoKrystal.address, gelatoKrystal.interface, 'canExec', [order, user, id]);
 
       expect(canExecResult).to.be.eq('OK');
 

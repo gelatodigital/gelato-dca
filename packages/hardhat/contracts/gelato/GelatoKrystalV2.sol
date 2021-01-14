@@ -209,7 +209,7 @@ contract GelatoKrystalV2 is Ownable {
 
         require(minReturn < actualReturn, "GelatoKrystsal: Time passed but expected return too low");
 
-        require(executorModule == _msgSender(), "GelatoKrystal: Caller is not the executorModule");
+        require(executorModule == _msgSender(), "GelatoKrystal: Caller is not the executorModule"); // should we check this here ??
 
         return "OK";
     }
