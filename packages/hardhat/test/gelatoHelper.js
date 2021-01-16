@@ -131,7 +131,7 @@ module.exports.getSubmittedTaskReceipt = async (gelatoCore) => {
 
 module.exports.getSubmittedTaskV2 = async (gelatoKrystal) => {
   const block = await ethers.provider.getBlock();
-  const currentTaskId = await gelatoKrystal.currentTaskId();
+  const currentTaskId = await gelatoKrystal.taskId();
   const topics = gelatoKrystal.filters.LogTaskSubmitted(currentTaskId).topics;
   const filter = {
     address: gelatoKrystal.address.toLowerCase(),
@@ -174,7 +174,7 @@ module.exports.getGelatoGasPriceV2 = async (gasPriceOracleAddress) => {
   );
 
   return await gelatoGasPriceOracle.latestAnswer();
-}
+};
 
 module.exports.getAggregatedOracles = () => {
   if (network.name == 'hardhat' || network.name == 'mainnet') {

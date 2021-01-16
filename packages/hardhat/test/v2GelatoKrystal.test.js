@@ -127,25 +127,33 @@ describe('test Krystal with Gelato V2 - No Gelato Core', async () => {
       tradeAmount.mul(NUM_TRADES),
     );
 
-    const orderToSubmit = {
-      inToken: daiAddress,
-      outToken: usdcAddress,
-      amountPerTrade: tradeAmount,
-      nTradesLeft: NUM_TRADES,
-      minSlippage: 9000, // starts at 10%
-      maxSlippage: 0, // max slippage of 100%
-      delay: TWO_MINUTES,
-      gasPriceCeil: 0,
-      lastExecutionTime: 0,
-    };
+    // const orderToSubmit = {
+    //   inToken: daiAddress,
+    //   outToken: usdcAddress,
+    //   amountPerTrade: tradeAmount,
+    //   nTradesLeft: NUM_TRADES,
+    //   minSlippage: 9000, // starts at 10%
+    //   maxSlippage: 0, // max slippage of 100%
+    //   delay: TWO_MINUTES,
+    //   gasPriceCeil: 0,
+    // };
 
     const submitTx = await gelatoKrystal
       .connect(gelatoUser)
-      .submit(orderToSubmit);
+      .submit(
+        daiAddress,
+        usdcAddress,
+        tradeAmount,
+        NUM_TRADES,
+        9000 /* starts at 10%*/,
+        0 /*max slippage of 100%*/,
+        TWO_MINUTES,
+        0,
+      );
     submitTx.wait();
 
     // Collect Gelato Task Receipt
-    let { order, user, id } = await getSubmittedTaskV2(gelatoKrystal);
+    let { order, id } = await getSubmittedTaskV2(gelatoKrystal);
 
     // Approve User Proxy to spend user token
     const totalApprove = tradeAmount.mul(BigNumber.from(NUM_TRADES));
@@ -156,8 +164,14 @@ describe('test Krystal with Gelato V2 - No Gelato Core', async () => {
 
     // Simulate Task Cycle
     for (let i = 0; i < NUM_TRADES; i++) {
-      let canExecResult = await ok(executor, gelatoKrystal.address, gelatoKrystal.interface, 'canExec', [order, user, id]);
-      expect(canExecResult).to.be.eq("NOT OK");
+      let canExecResult = await ok(
+        executor,
+        gelatoKrystal.address,
+        gelatoKrystal.interface,
+        'canExec',
+        [order, id],
+      );
+      expect(canExecResult).to.be.eq('NOT OK');
 
       // Fast forward to next execution timestamp
       const block = await admin.provider.getBlock();
@@ -165,13 +179,19 @@ describe('test Krystal with Gelato V2 - No Gelato Core', async () => {
       await admin.provider.send('evm_mine', [executionTime]);
 
       // Can execute? (should be OK)
-      canExecResult = await ok(executor, gelatoKrystal.address, gelatoKrystal.interface, 'canExec', [order, user, id]);
+      canExecResult = await ok(
+        executor,
+        gelatoKrystal.address,
+        gelatoKrystal.interface,
+        'canExec',
+        [order, id],
+      );
 
       expect(canExecResult).to.be.eq('OK');
 
       // Executor executes
       await expect(
-        gelatoKrystal.connect(executor).exec(order, user, id, {
+        gelatoKrystal.connect(executor).exec(order, id, {
           gasPrice: gelatoGasPrice,
           gasLimit: 5000000,
         }),
@@ -181,7 +201,6 @@ describe('test Krystal with Gelato V2 - No Gelato Core', async () => {
         // Collect next Task Receipt in cycle
         let newTask = await getSubmittedTaskV2(gelatoKrystal);
         order = newTask.order;
-        user = newTask.user;
         id = newTask.id;
       }
     }
