@@ -9,6 +9,7 @@
   ],
   "private": true,
   "scripts": {
+    "hardhat:run-compile": "yarn workspace @gelato-krystal/hardhat compile",
     "hardhat:run-test": "yarn workspace @gelato-krystal/hardhat test",
     "react-app:build": "yarn workspace @gelato-krystal/react-app build",
     "react-app:eject": "yarn workspace @gelato-krystal/react-app eject",

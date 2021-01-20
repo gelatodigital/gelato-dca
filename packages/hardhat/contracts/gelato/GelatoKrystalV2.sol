@@ -2,313 +2,346 @@
 pragma solidity ^0.7.0;
 pragma experimental ABIEncoderV2;
 
-import {IERC20, SafeERC20, SafeMath} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {IOracleAggregator} from "./interfaces/IOracleAggregator.sol";
-import {IGasPriceOracle} from "./interfaces/IGasPriceOracle.sol";
-import {ISmartWalletSwapImplementation} from "./interfaces/ISmartWalletSwapImplementation.sol";
+import {
+  IERC20,
+  SafeERC20,
+  SafeMath
+} from '@openzeppelin/contracts/token/ERC20/SafeERC20.sol';
+import {Ownable} from '@openzeppelin/contracts/access/Ownable.sol';
+import {IOracleAggregator} from './interfaces/IOracleAggregator.sol';
+import {IGasPriceOracle} from './interfaces/IGasPriceOracle.sol';
+import {
+  ISmartWalletSwapImplementation
+} from './interfaces/ISmartWalletSwapImplementation.sol';
 
 contract GelatoKrystalV2 is Ownable {
+  using SafeERC20 for IERC20;
+  using SafeMath for uint256;
 
-    using SafeERC20 for IERC20;
-    using SafeMath for uint256;
+  struct Order {
+    address user;
+    address inToken;
+    address outToken;
+    uint256 amountPerTrade;
+    uint256 nTradesLeft;
+    uint256 minSlippage;
+    uint256 maxSlippage;
+    uint256 delay;
+    uint256 gasPriceCeil;
+    uint256 lastExecutionTime;
+  }
 
-    struct Order {
-        address inToken;
-        address outToken;
-        uint256 amountPerTrade;
-        uint256 nTradesLeft;
-        uint256 minSlippage;
-        uint256 maxSlippage;
-        uint256 delay;
-        uint256 gasPriceCeil;
-        uint256 lastExecutionTime;
-    }
+  event LogTaskSubmitted(uint256 indexed id, address indexed user, Order order);
 
-    event LogTaskSubmitted (
-        uint256 indexed id,
-        address indexed user,
-        Order order
+  event LogExecSuccess(uint256 indexed taskId, address indexed executor);
+
+  // user => taskId => taskHash
+  mapping(uint256 => bytes32) public taskHash;
+  // user => token => totalToSpend
+  mapping(address => mapping(address => uint256)) public totalToSpend;
+
+  address internal constant _ETH = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+  bytes internal constant _HINT = '';
+  uint256 public constant PLATFORM_FEE_BPS = 8;
+  uint256 public constant GAS_OVERHEAD = 100000; // TODO: get more accurate overhead estimate
+  uint256 public taskId;
+
+  IOracleAggregator public immutable oracleAggregator;
+  ISmartWalletSwapImplementation public immutable smartWalletSwap;
+  IGasPriceOracle public immutable gasPriceOracle;
+  address payable public immutable platformWallet;
+  address public immutable executorModule;
+
+  constructor(
+    IOracleAggregator _oracleAggregator,
+    ISmartWalletSwapImplementation _smartWalletSwap,
+    address payable _platformWallet,
+    address _executorModule,
+    IGasPriceOracle _gasPriceOracle
+  ) {
+    oracleAggregator = _oracleAggregator;
+    smartWalletSwap = _smartWalletSwap;
+    platformWallet = _platformWallet;
+    executorModule = _executorModule;
+    gasPriceOracle = _gasPriceOracle;
+  }
+
+  modifier gelatofy(address _outToken, address _user) {
+    // start gas measurement and check if msg.sender is Gelato
+    uint256 gasStart = gasleft();
+    require(
+      executorModule == _msgSender(),
+      'GelatoKrystal: Caller is not the executorModule'
+    );
+    uint256 preBalance = IERC20(_outToken).balanceOf(address(this));
+
+    // Execute Logic
+    _;
+
+    // handle payment
+    uint256 received =
+      IERC20(_outToken).balanceOf(address(this)).sub(preBalance);
+    _handlePayments(received, _outToken, gasStart, _user);
+  }
+
+  function submit(
+    address inToken,
+    address outToken,
+    uint256 amountPerTrade,
+    uint256 nTradesLeft,
+    uint256 minSlippage,
+    uint256 maxSlippage,
+    uint256 delay,
+    uint256 gasPriceCeil
+  ) external {
+    Order memory order =
+      Order({
+        user: msg.sender,
+        inToken: inToken,
+        outToken: outToken,
+        amountPerTrade: amountPerTrade,
+        nTradesLeft: nTradesLeft,
+        minSlippage: minSlippage,
+        maxSlippage: maxSlippage,
+        delay: delay,
+        gasPriceCeil: gasPriceCeil,
+        lastExecutionTime: block.timestamp
+      });
+
+    // œdev To Do: Approval Implementation
+
+    // uint256 upcomingSpend = totalToSpend[msg.sender][order.inToken];
+    // totalToSpend[msg.sender][order.inToken] =
+    //     upcomingSpend.add(order.amountPerTrade.mul(order.nTradesLeft));
+
+    // store order
+    _storeOrder(order);
+  }
+
+  function exec(Order memory _order, uint256 _id)
+    external
+    gelatofy(_order.outToken, _order.user)
+  {
+    // pre exec checks
+    preCanExec(_order, _id);
+
+    // action exec
+    _action(_order);
+
+    // task cycle logic
+    delete taskHash[_id];
+    if (_order.nTradesLeft > 0) _updateAndSubmitNextTask(_order, _id);
+
+    // emit event
+    emit LogExecSuccess(_id, executorModule);
+  }
+
+  // ############# VIEW #############
+  function canExec(Order memory _order, uint256 _id)
+    public
+    view
+    returns (string memory)
+  {
+    // 1. verify task submitted and gas price
+    preCanExec(_order, _id);
+
+    // Balance Check
+    uint256 balance = IERC20(_order.inToken).balanceOf(_order.user);
+    require(
+      balance >= _order.amountPerTrade,
+      'GelatoKrystsal: Insufficient balance'
     );
 
-    event LogExecSuccess(
-        uint256 indexed taskId,
-        address indexed executor
+    // 2. Approval Check
+    uint256 allowance =
+      IERC20(_order.inToken).allowance(_order.user, address(this));
+    require(
+      allowance >= _order.amountPerTrade,
+      'GelatoKrystsal: Insufficient allowance'
     );
 
-    // user => taskId => taskHash
-    mapping(address => mapping(uint256 => bytes32)) public taskHash;
-    // user => token => totalToSpend
-    mapping(address => mapping(address => uint256)) public totalToSpend;
+    // 4. Rate Check
+    uint256 minReturn = getMinReturn(_order);
+    (uint256 actualReturn, ) =
+      smartWalletSwap.getExpectedReturnKyber(
+        IERC20(_order.inToken),
+        IERC20(_order.outToken),
+        _order.amountPerTrade,
+        PLATFORM_FEE_BPS,
+        _HINT
+      );
 
-    address internal constant _ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
-    bytes internal constant _HINT = "";
-    uint256 public constant PLATFORM_FEE_BPS = 8;
-    bytes32 internal constant EXECUTED = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff; 
-    uint256 public constant GAS_OVERHEAD = 100000; // TODO: get more accurate overhead estimate
-    uint256 public taskId;
+    require(
+      minReturn < actualReturn,
+      'GelatoKrystsal: Time passed but expected return too low'
+    );
 
-    IOracleAggregator public immutable oracleAggregator;
-    ISmartWalletSwapImplementation public immutable smartWalletSwap;
-    IGasPriceOracle public immutable gasPriceOracle;
+    require(
+      executorModule == _msgSender(),
+      'GelatoKrystal: Caller is not the executorModule'
+    );
 
-    address payable public platformWallet;
-    address public executorModule;
+    return 'OK';
+  }
 
-    constructor(
-        IOracleAggregator _oracleAggregator,
-        ISmartWalletSwapImplementation _smartWalletSwap,
-        address payable _platformWallet,
-        address _executorModule,
-        IGasPriceOracle _gasPriceOracle
-    )
-    {
-        oracleAggregator = _oracleAggregator;
-        smartWalletSwap = _smartWalletSwap;
-        platformWallet = _platformWallet;
-        executorModule = _executorModule;
-        gasPriceOracle = _gasPriceOracle;
+  function preCanExec(Order memory _order, uint256 _id) public view {
+    // Check whether order is valid
+    bytes32 taskHashStor = taskHash[_id];
+    require(taskHashStor != bytes32(0), 'GelatoKrystal: invalid task');
+
+    // Check whether passed calldata is correct
+    require(
+      hashTask(_order, _id) == taskHashStor,
+      'GelatoKrystal: incorrect task parameters'
+    );
+  }
+
+  function getMinReturn(Order memory _order)
+    public
+    view
+    returns (uint256 minReturn)
+  {
+    // 4. Rate Check
+    (uint256 idealReturn, ) =
+      oracleAggregator.getExpectedReturnAmount(
+        _order.amountPerTrade,
+        _order.inToken,
+        _order.outToken
+      );
+
+    // check time (reverts if block.timestamp is below execTime)
+    // solhint-disable-next-line not-rely-on-time
+    uint256 timeSinceCanExec =
+      block.timestamp.sub(_order.lastExecutionTime.add(_order.delay));
+
+    uint256 slippage;
+    if (_order.minSlippage > timeSinceCanExec) {
+      slippage = _order.minSlippage.sub(timeSinceCanExec);
     }
 
-    modifier onlyExecModule() {
-        require(executorModule == _msgSender(), "GelatoKrystal: Caller is not the executorModule");
-        _;
+    if (_order.maxSlippage > slippage) {
+      slippage = _order.maxSlippage;
     }
 
-    function submit(
-        Order memory _order
-    )
-        external
-    {
-        if (_order.lastExecutionTime == 0) {
-            _order.lastExecutionTime = block.timestamp;
-        }
-        taskId = taskId.add(1);
+    minReturn = idealReturn.sub(idealReturn.mul(slippage).div(10000));
+  }
 
-        bytes32 hashed = hashTask(_order, msg.sender, taskId);
-        require(taskHash[msg.sender][taskId] == bytes32(0), "GelatoKrystal: task already exists");
-        taskHash[msg.sender][taskId] = hashed;
+  function hashTask(Order memory _order, uint256 _taskId)
+    public
+    pure
+    returns (bytes32)
+  {
+    return keccak256(abi.encode(_order, _taskId));
+  }
 
-        uint256 upcomingSpend = totalToSpend[msg.sender][_order.inToken];
-        totalToSpend[msg.sender][_order.inToken] =
-            upcomingSpend.add(_order.amountPerTrade.mul(_order.nTradesLeft));
+  function getGelatoFee(
+    uint256 _gasStart,
+    address _outToken,
+    uint256 _received
+  ) private view returns (uint256 gelatoFee) {
+    uint256 gasFeeEth =
+      _gasStart.sub(gasleft()).add(GAS_OVERHEAD).mul(getGasPrice());
 
-        emit LogTaskSubmitted(taskId, msg.sender, _order);
-    }
+    // returns purely the ethereum tx fee
+    (uint256 ethTxFee, ) =
+      oracleAggregator.getExpectedReturnAmount(gasFeeEth, _ETH, _outToken);
 
-    function exec(
-        Order memory _order,
-        address _user,
-        uint256 _id
-    ) 
-        external 
-        onlyExecModule 
-    {
-        // gas measurement
-        uint256 gasStart = gasleft();
+    // add 7% bps on top of Ethereum tx fee
+    gelatoFee = ethTxFee.add(_received.mul(7).div(10000));
+  }
 
-        // verify task submitted and gas price
-        _canExec(_order, _user, _id);
+  function getGasPrice() private view returns (uint256) {
+    uint256 oracleGasPrice = uint256(gasPriceOracle.latestAnswer());
 
-        IERC20(_order.inToken).safeTransferFrom(_user, address(this), _order.amountPerTrade);
-        IERC20(_order.inToken).safeApprove(address(smartWalletSwap), _order.amountPerTrade);
+    // Use tx.gasprice capped by 1.3x Chainlink Oracle
+    return
+      tx.gasprice < oracleGasPrice.mul(130).div(100)
+        ? tx.gasprice
+        : oracleGasPrice.mul(130).div(100);
+  }
 
-        // 4. Rate Check
-        (uint256 idealReturn,) = oracleAggregator.getExpectedReturnAmount(
-            _order.amountPerTrade,
-            _order.inToken,
-            _order.outToken
-        );
+  // ############# PRIVATE #############
+  function _action(Order memory _order) private {
+    IERC20(_order.inToken).safeTransferFrom(
+      _order.user,
+      address(this),
+      _order.amountPerTrade
+    );
+    IERC20(_order.inToken).safeApprove(
+      address(smartWalletSwap),
+      _order.amountPerTrade
+    );
 
-        // check time (reverts if block.timestamp is below execTime)
-        // solhint-disable-next-line not-rely-on-time
-        uint256 timeSinceCanExec = block.timestamp.sub(_order.lastExecutionTime.add(_order.delay));
-        uint256 slippage;
-        if (_order.minSlippage > timeSinceCanExec) {
-            slippage = _order.minSlippage.sub(timeSinceCanExec);
-        }
+    uint256 minReturn = getMinReturn(_order);
 
-        if (_order.maxSlippage > slippage) {
-            slippage = _order.maxSlippage;
-        }
+    smartWalletSwap.swapKyber(
+      IERC20(_order.inToken),
+      IERC20(_order.outToken),
+      _order.amountPerTrade,
+      minReturn,
+      address(this),
+      PLATFORM_FEE_BPS,
+      platformWallet,
+      _HINT,
+      false
+    );
+  }
 
-        uint256 minReturn = idealReturn.sub(idealReturn.mul(slippage).div(10000));
+  function _updateAndSubmitNextTask(Order memory _order, uint256 _id) private {
+    // update remaining allowance needed
+    // uint256 prevTotal = totalToSpend[_order.user][_order.inToken];
+    // totalToSpend[_order.user][_order.inToken] = prevTotal.sub(_order.amountPerTrade);
 
-        uint256 received = smartWalletSwap.swapKyber(
-            IERC20(_order.inToken),
-            IERC20(_order.outToken),
-            _order.amountPerTrade,
-            minReturn,
-            address(this),
-            PLATFORM_FEE_BPS,
-            platformWallet,
-            _HINT,
-            false
-        );
-        if (_order.nTradesLeft > 0) {
-            _updateAndSubmitTask(_order, _user, _id);
-        }
-        emit LogExecSuccess(_id, executorModule);
-        uint256 gasFeeEth = gasStart.sub(gasleft()).add(GAS_OVERHEAD).mul(fetchCurrentGasPrice()); // TODO: Add gelato profit / more overhead for gas bump ??
-        (uint256 gasFeeToken,) = oracleAggregator.getExpectedReturnAmount(
-            gasFeeEth,
-            _ETH_ADDRESS,
-            _order.outToken
-        );
-        IERC20(_order.outToken).safeTransfer(executorModule, gasFeeToken);
-        IERC20(_order.outToken).safeTransfer(_user, received.sub(gasFeeToken));
-    }
+    // update next order
+    _order.nTradesLeft = _order.nTradesLeft.sub(1);
+    _order.lastExecutionTime = block.timestamp;
 
-    function canExec(
-        Order memory _order,
-        address _user,
-        uint256 _id
-    )
-        public
-        view
-        returns(string memory)
-    {
-        // verify task submitted and gas price
-        _canExec(_order, _user, _id);
+    // store order
+    _storeOrder(_order);
+  }
 
-        // 1. Balance Check
-        uint256 balance = IERC20(_order.inToken).balanceOf(_user);
-        require(balance >= _order.amountPerTrade, "GelatoKrystsal: Insufficient balance");
+  function _storeOrder(Order memory _order) private {
+    taskId = taskId.add(1);
 
-        // 2. Approval Check
-        uint256 allowance = IERC20(_order.inToken).allowance(_user, address(this));
-        require(allowance >= _order.amountPerTrade, "GelatoKrystsal: Insufficient allowance");
+    // submit task
+    bytes32 hashed = hashTask(_order, taskId);
+    taskHash[taskId] = hashed;
 
-        // 4. Rate Check
-        (uint256 idealReturn,) = oracleAggregator.getExpectedReturnAmount(
-            _order.amountPerTrade,
-            _order.inToken,
-            _order.outToken
-        );
+    emit LogTaskSubmitted(taskId, _order.user, _order);
+  }
 
-        // check time (reverts if block.timestamp is below execTime)
-        // solhint-disable-next-line not-rely-on-time
-        uint256 timeSinceCanExec = block.timestamp.sub(_order.lastExecutionTime.add(_order.delay));
-        uint256 slippage;
-        if (_order.minSlippage > timeSinceCanExec) {
-            slippage = _order.minSlippage.sub(timeSinceCanExec);
-        }
+  function _handlePayments(
+    uint256 _received,
+    address _outToken,
+    uint256 _gasStart,
+    address _user
+  ) private {
+    // Get fee payable to Gelato
+    uint256 txFee = getGelatoFee(_gasStart, _outToken, _received);
 
-        if (_order.maxSlippage > slippage) {
-            slippage = _order.maxSlippage;
-        }
+    // Pay Gelato
+    IERC20(_outToken).safeTransfer(executorModule, txFee);
 
-        uint256 minReturn = idealReturn.sub(idealReturn.mul(slippage).div(10000));
-        (uint256 actualReturn,) = smartWalletSwap.getExpectedReturnKyber(
-            IERC20(_order.inToken),
-            IERC20(_order.outToken),
-            _order.amountPerTrade,
-            PLATFORM_FEE_BPS,
-            _HINT
-        );
+    // Send remaining tokens to user
+    IERC20(_outToken).safeTransfer(_user, _received.sub(txFee));
+  }
 
-        require(minReturn < actualReturn, "GelatoKrystsal: Time passed but expected return too low");
+  // ############# Fallback #############
+  // solhint-disable-next-line no-empty-blocks
+  receive() external payable {}
 
-        require(executorModule == _msgSender(), "GelatoKrystal: Caller is not the executorModule"); // should we check this here ??
-
-        return "OK";
-    }
-
-    function _canExec(
-        Order memory _order,
-        address _user,
-        uint256 _id
-    )
-        private
-        view
-    {
-        require(taskHash[_user][_id] != bytes32(0), "GelatoKrystal: task not submitted");
-        require(taskHash[_user][_id] != EXECUTED, "GelatoKrystal: task already executed");
-        bytes32 hashed = hashTask(_order, _user, _id);
-        require(isTaskSubmitted(hashed, _user, _id), "GelatoKrystal: incorrect task parameters");
-        require(_order.gasPriceCeil == 0 || _order.gasPriceCeil >= fetchCurrentGasPrice(), "GelatoKrystal: gas price too high");
-    }
-
-    function _updateAndSubmitTask(
-        Order memory _order,
-        address _user,
-        uint256 _id        
-    ) 
-        private
-    {
-        // update remaining allowance needed
-        uint256 prevTotal = totalToSpend[_user][_order.inToken];
-        totalToSpend[_user][_order.inToken] = prevTotal.sub(_order.amountPerTrade);
-
-        // update task to executed
-        taskHash[_user][_id] = EXECUTED;
-
-        // update next order
-        _order.nTradesLeft = _order.nTradesLeft.sub(1);
-        _order.lastExecutionTime = block.timestamp;
-        taskId = taskId.add(1);
-
-        // submit task
-        bytes32 hashed = hashTask(_order, _user, taskId);
-        require(taskHash[_user][taskId] == bytes32(0));
-        taskHash[_user][taskId] = hashed;
-
-        emit LogTaskSubmitted(taskId, _user, _order);
-    }
-
-    function isTaskSubmitted(
-        bytes32 _taskHash,
-        address _user,
-        uint256 _id
-    )
-        public
-        view
-        returns(bool)
-    {
-        return (taskHash[_user][_id] == _taskHash);
-    }
-
-    function hashTask(Order memory _order, address _sender, uint256 _taskId) public pure returns(bytes32) {
-        return keccak256(abi.encode(_order, _sender, _taskId));
-    }
-
-    function currentTaskId() public view returns (uint256) {
-        return taskId;
-    }
-
-    function fetchCurrentGasPrice() public view returns (uint256) {
-        return uint256(gasPriceOracle.latestAnswer());
-    }
-
-    function allowanceDelta(address _user, IERC20 _token)
-        public
-        view
-        returns(uint256 delta, bool isLiquid)
-    {
-        uint256 upcoming = totalToSpend[_user][address(_token)];
-        uint256 allowance = _token.allowance(_user, address(this));
-        if (allowance >= upcoming) {
-            isLiquid = true;
-            delta = allowance.sub(upcoming);
-        } else {
-            delta = upcoming.sub(allowance);
-        }
-    }
-
-    // ############# Mgmt #############
-    function reAssignExecutorModule(
-        address _executorModule
-    ) external onlyOwner {
-        executorModule = _executorModule;
-    }
-
-    function reAssignPlatforWallet (
-        address payable _platformWallet
-    ) external payable onlyOwner {
-        platformWallet = _platformWallet;
-    }
-
-    // ############# Fallback #############
-    // solhint-disable-next-line no-empty-blocks
-    receive() external payable {}
+  // function allowanceDelta(address _user, IERC20 _token)
+  //     public
+  //     view
+  //     returns(uint256 delta, bool isLiquid)
+  // {
+  //     uint256 upcoming = totalToSpend[_user][address(_token)];
+  //     uint256 allowance = _token.allowance(_user, address(this));
+  //     if (allowance >= upcoming) {
+  //         isLiquid = true;
+  //         delta = allowance.sub(upcoming);
+  //     } else {
+  //         delta = upcoming.sub(allowance);
+  //     }
+  // }
 }
