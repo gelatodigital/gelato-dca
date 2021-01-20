@@ -1,10 +1,10 @@
 const { ethers, artifacts, network } = require('hardhat');
 const { utils, BigNumber } = ethers;
 const { expect } = require('chai');
-const { GelatoCore } = require('@gelatonetwork/core');
+const { ok } = require('./canExec');
 const {
-  getSubmittedTaskReceipt,
-  getGelatoGasPrices,
+  getSubmittedTaskV2,
+  getGelatoGasPriceV2,
   getAggregatedOracles,
   getTokenFromFaucet,
 } = require('./gelatoHelper');
@@ -20,7 +20,7 @@ const sushiswapRouter = network.config.addresses.sushiswapRouter;
 const usdtAddress = network.config.addresses.usdtAddress;
 const usdcAddress = network.config.addresses.usdcAddress;
 const daiAddress = network.config.addresses.daiAddress;
-const gelatoCoreAddress = network.config.addresses.gelatoCoreAddress;
+const gasPriceOracleAddress = network.config.addresses.gasPriceOracleAddress;
 
 let swapImplementation;
 let swapProxy;
@@ -28,15 +28,16 @@ let admin;
 let adminAddress;
 let gelatoUser;
 let gelatoUserAddress;
-let gelatoCore;
 let executor;
+let executorAddress;
 let oracleAggregator;
 let gelatoKrystal;
 
-describe('test Krystal with Gelato', async () => {
+describe('test Krystal with Gelato V2 - No Gelato Core', async () => {
   before('tests', async () => {
     [admin, executor, gelatoUser] = await ethers.getSigners();
     adminAddress = await admin.getAddress();
+    executorAddress = await executor.getAddress();
     gelatoUserAddress = await gelatoUser.getAddress();
 
     const swapImplementationFactory = await ethers.getContractFactory(
@@ -66,14 +67,6 @@ describe('test Krystal with Gelato', async () => {
       admin,
     );
 
-    gelatoCore = await ethers.getContractAt(GelatoCore.abi, gelatoCoreAddress);
-
-    const minExecutorStake = await gelatoCore.minExecutorStake();
-    await gelatoCore.connect(executor).stakeExecutor({
-      value: minExecutorStake,
-      gasLimit: 5000000,
-    });
-
     const {
       tokensA,
       tokensB,
@@ -96,18 +89,17 @@ describe('test Krystal with Gelato', async () => {
       decimals,
     );
 
-    const gelatoKrystalFactory = await ethers.getContractFactory(
-      'GelatoKrystal',
+    const gelatoKrystalV2Factory = await ethers.getContractFactory(
+      'GelatoKrystalV2',
       admin,
     );
 
-    gelatoKrystal = await gelatoKrystalFactory.deploy(
-      gelatoCore.address,
+    gelatoKrystal = await gelatoKrystalV2Factory.deploy(
       oracleAggregator.address,
       swapProxy.address,
-      await executor.getAddress(),
-      adminAddress, // the platform wallet must be admin or it causes an error in the swap
-      { value: ethers.utils.parseEther('10') },
+      adminAddress,
+      executorAddress,
+      gasPriceOracleAddress,
     );
 
     // approve allowance
@@ -135,43 +127,51 @@ describe('test Krystal with Gelato', async () => {
       tradeAmount.mul(NUM_TRADES),
     );
 
-    const order = {
-      _inToken: daiAddress,
-      _outToken: usdcAddress,
-      _amountPerTrade: tradeAmount,
-      _nTrades: NUM_TRADES,
-      _minSlippage: 100, // starts at 1%
-      _maxSlippage: 0, // max slippage of 10%
-      _delay: TWO_MINUTES,
-      _gasPriceCeil: 0,
-    };
+    // const orderToSubmit = {
+    //   inToken: daiAddress,
+    //   outToken: usdcAddress,
+    //   amountPerTrade: tradeAmount,
+    //   nTradesLeft: NUM_TRADES,
+    //   minSlippage: 9000, // starts at 10%
+    //   maxSlippage: 0, // max slippage of 100%
+    //   delay: TWO_MINUTES,
+    //   gasPriceCeil: 0,
+    // };
 
     const submitTx = await gelatoKrystal
       .connect(gelatoUser)
-      .submitDCAKyber(order);
+      .submit(
+        daiAddress,
+        usdcAddress,
+        tradeAmount,
+        NUM_TRADES,
+        9000 /* starts at 10%*/,
+        0 /*max slippage of 100%*/,
+        TWO_MINUTES,
+        0,
+      );
     submitTx.wait();
 
     // Collect Gelato Task Receipt
-    let taskReceipt = await getSubmittedTaskReceipt(gelatoCore);
+    let { order, id } = await getSubmittedTaskV2(gelatoKrystal);
 
     // Approve User Proxy to spend user token
     const totalApprove = tradeAmount.mul(BigNumber.from(NUM_TRADES));
     await dai.connect(gelatoUser).approve(gelatoKrystal.address, totalApprove);
 
     // Fetch Gelato Gas Price
-    const { gelatoGasPrice, gelatoMaxGas } = await getGelatoGasPrices(
-      gelatoCore,
-    );
+    const gelatoGasPrice = await getGelatoGasPriceV2(gasPriceOracleAddress);
 
     // Simulate Task Cycle
     for (let i = 0; i < NUM_TRADES; i++) {
-      // Can execute? (timestamp condition should block)
-      let canExecResult = await gelatoCore
-        .connect(executor)
-        .canExec(taskReceipt, gelatoMaxGas, gelatoGasPrice);
-      expect(canExecResult).to.be.eq(
-        'ConditionNotOk:GelatoKrystsal: Time not passed',
+      let canExecResult = await ok(
+        executor,
+        gelatoKrystal.address,
+        gelatoKrystal.interface,
+        'canExec',
+        [order, id],
       );
+      expect(canExecResult).to.be.eq('NOT OK');
 
       // Fast forward to next execution timestamp
       const block = await admin.provider.getBlock();
@@ -179,33 +179,29 @@ describe('test Krystal with Gelato', async () => {
       await admin.provider.send('evm_mine', [executionTime]);
 
       // Can execute? (should be OK)
-      canExecResult = await gelatoCore
-        .connect(executor)
-        .canExec(taskReceipt, gelatoMaxGas, gelatoGasPrice);
+      canExecResult = await ok(
+        executor,
+        gelatoKrystal.address,
+        gelatoKrystal.interface,
+        'canExec',
+        [order, id],
+      );
 
       expect(canExecResult).to.be.eq('OK');
 
       // Executor executes
       await expect(
-        gelatoCore.connect(executor).exec(taskReceipt, {
+        gelatoKrystal.connect(executor).exec(order, id, {
           gasPrice: gelatoGasPrice,
           gasLimit: 5000000,
         }),
-      ).to.emit(gelatoCore, 'LogExecSuccess');
-      // const tx = await gelatoCore.connect(executor).exec(taskReceipt, {
-      //   gasPrice: gelatoGasPrice,
-      //   gasLimit: 5000000,
-      // });
-      // const r = await admin.provider.getTransactionReceipt(tx.hash);
-      // /* eslint-disable no-console */
-      // console.log(r.logs.length);
-      // const event = gelatoCore.interface.parseLog(r.logs[0]);
-      // /* eslint-disable no-console */
-      // console.log(event);
+      ).to.emit(gelatoKrystal, 'LogExecSuccess');
 
       if (i != NUM_TRADES - 1) {
         // Collect next Task Receipt in cycle
-        taskReceipt = await getSubmittedTaskReceipt(gelatoCore);
+        let newTask = await getSubmittedTaskV2(gelatoKrystal);
+        order = newTask.order;
+        id = newTask.id;
       }
     }
   });
