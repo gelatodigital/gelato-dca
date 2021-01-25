@@ -7,14 +7,15 @@ import {
   SafeERC20,
   SafeMath
 } from '@openzeppelin/contracts/token/ERC20/SafeERC20.sol';
-import {Ownable} from '@openzeppelin/contracts/access/Ownable.sol';
-import {IOracleAggregator} from './interfaces/IOracleAggregator.sol';
-import {IGasPriceOracle} from './interfaces/IGasPriceOracle.sol';
 import {
   ISmartWalletSwapImplementation
 } from './interfaces/ISmartWalletSwapImplementation.sol';
+import {IGasPriceOracle} from './interfaces/IGasPriceOracle.sol';
+import {IGelatoService} from './interfaces/IGelatoService.sol';
+import {IOracleAggregator} from './interfaces/IOracleAggregator.sol';
+import {GelatoServiceStandard} from './GelatoServiceStandard.sol';
 
-contract GelatoKrystalV2 is Ownable {
+contract GelatoKrystalV2 is GelatoServiceStandard {
   using SafeERC20 for IERC20;
   using SafeMath for uint256;
 
@@ -31,57 +32,22 @@ contract GelatoKrystalV2 is Ownable {
     uint256 lastExecutionTime;
   }
 
-  event LogTaskSubmitted(uint256 indexed id, address indexed user, Order order);
-
-  event LogExecSuccess(uint256 indexed taskId, address indexed executor);
-
-  // user => taskId => taskHash
-  mapping(uint256 => bytes32) public taskHash;
-  // user => token => totalToSpend
-  mapping(address => mapping(address => uint256)) public totalToSpend;
-
-  address internal constant _ETH = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
   bytes internal constant _HINT = '';
   uint256 public constant PLATFORM_FEE_BPS = 8;
-  uint256 public constant GAS_OVERHEAD = 100000; // TODO: get more accurate overhead estimate
-  uint256 public taskId;
+  uint256 public constant GAS_OVERHEAD = 100000;
 
-  IOracleAggregator public immutable oracleAggregator;
   ISmartWalletSwapImplementation public immutable smartWalletSwap;
-  IGasPriceOracle public immutable gasPriceOracle;
   address payable public immutable platformWallet;
-  address public immutable executorModule;
 
   constructor(
-    IOracleAggregator _oracleAggregator,
-    ISmartWalletSwapImplementation _smartWalletSwap,
-    address payable _platformWallet,
     address _executorModule,
-    IGasPriceOracle _gasPriceOracle
-  ) {
-    oracleAggregator = _oracleAggregator;
+    IOracleAggregator _oracleAggregator,
+    IGasPriceOracle _gasPriceOracle,
+    ISmartWalletSwapImplementation _smartWalletSwap,
+    address payable _platformWallet
+  ) GelatoServiceStandard(_executorModule, _oracleAggregator, _gasPriceOracle) {
     smartWalletSwap = _smartWalletSwap;
     platformWallet = _platformWallet;
-    executorModule = _executorModule;
-    gasPriceOracle = _gasPriceOracle;
-  }
-
-  modifier gelatofy(address _outToken, address _user) {
-    // start gas measurement and check if msg.sender is Gelato
-    uint256 gasStart = gasleft();
-    require(
-      executorModule == _msgSender(),
-      'GelatoKrystal: Caller is not the executorModule'
-    );
-    uint256 preBalance = IERC20(_outToken).balanceOf(address(this));
-
-    // Execute Logic
-    _;
-
-    // handle payment
-    uint256 received =
-      IERC20(_outToken).balanceOf(address(this)).sub(preBalance);
-    _handlePayments(received, _outToken, gasStart, _user);
   }
 
   function submit(
@@ -108,11 +74,7 @@ contract GelatoKrystalV2 is Ownable {
         lastExecutionTime: block.timestamp
       });
 
-    // œdev To Do: Approval Implementation
-
-    // uint256 upcomingSpend = totalToSpend[msg.sender][order.inToken];
-    // totalToSpend[msg.sender][order.inToken] =
-    //     upcomingSpend.add(order.amountPerTrade.mul(order.nTradesLeft));
+    // @dev To Do: Handle Approval Tracking
 
     // store order
     _storeOrder(order);
@@ -120,7 +82,7 @@ contract GelatoKrystalV2 is Ownable {
 
   function exec(Order memory _order, uint256 _id)
     external
-    gelatofy(_order.outToken, _order.user)
+    gelatofy(_order.outToken, _order.user, GAS_OVERHEAD)
   {
     // pre exec checks
     preCanExec(_order, _id);
@@ -186,14 +148,8 @@ contract GelatoKrystalV2 is Ownable {
 
   function preCanExec(Order memory _order, uint256 _id) public view {
     // Check whether order is valid
-    bytes32 taskHashStor = taskHash[_id];
-    require(taskHashStor != bytes32(0), 'GelatoKrystal: invalid task');
-
-    // Check whether passed calldata is correct
-    require(
-      hashTask(_order, _id) == taskHashStor,
-      'GelatoKrystal: incorrect task parameters'
-    );
+    bytes32 execTaskHash = hashTask(_order, _id);
+    require(verifyTask(execTaskHash, _id), 'GelatoKrystal: invalid task');
   }
 
   function getMinReturn(Order memory _order)
@@ -234,32 +190,6 @@ contract GelatoKrystalV2 is Ownable {
     return keccak256(abi.encode(_order, _taskId));
   }
 
-  function getGelatoFee(
-    uint256 _gasStart,
-    address _outToken,
-    uint256 _received
-  ) private view returns (uint256 gelatoFee) {
-    uint256 gasFeeEth =
-      _gasStart.sub(gasleft()).add(GAS_OVERHEAD).mul(getGasPrice());
-
-    // returns purely the ethereum tx fee
-    (uint256 ethTxFee, ) =
-      oracleAggregator.getExpectedReturnAmount(gasFeeEth, _ETH, _outToken);
-
-    // add 7% bps on top of Ethereum tx fee
-    gelatoFee = ethTxFee.add(_received.mul(7).div(10000));
-  }
-
-  function getGasPrice() private view returns (uint256) {
-    uint256 oracleGasPrice = uint256(gasPriceOracle.latestAnswer());
-
-    // Use tx.gasprice capped by 1.3x Chainlink Oracle
-    return
-      tx.gasprice < oracleGasPrice.mul(130).div(100)
-        ? tx.gasprice
-        : oracleGasPrice.mul(130).div(100);
-  }
-
   // ############# PRIVATE #############
   function _action(Order memory _order) private {
     IERC20(_order.inToken).safeTransferFrom(
@@ -288,10 +218,6 @@ contract GelatoKrystalV2 is Ownable {
   }
 
   function _updateAndSubmitNextTask(Order memory _order, uint256 _id) private {
-    // update remaining allowance needed
-    // uint256 prevTotal = totalToSpend[_order.user][_order.inToken];
-    // totalToSpend[_order.user][_order.inToken] = prevTotal.sub(_order.amountPerTrade);
-
     // update next order
     _order.nTradesLeft = _order.nTradesLeft.sub(1);
     _order.lastExecutionTime = block.timestamp;
@@ -307,41 +233,33 @@ contract GelatoKrystalV2 is Ownable {
     bytes32 hashed = hashTask(_order, taskId);
     taskHash[taskId] = hashed;
 
-    emit LogTaskSubmitted(taskId, _order.user, _order);
+    emit LogTaskSubmitted(
+      taskId,
+      _encodeCanExec(_order, taskId),
+      address(this),
+      'function exec((address,address,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256),uint256) external',
+      _encodeExecParams(_order, taskId),
+      address(this)
+    );
   }
 
-  function _handlePayments(
-    uint256 _received,
-    address _outToken,
-    uint256 _gasStart,
-    address _user
-  ) private {
-    // Get fee payable to Gelato
-    uint256 txFee = getGelatoFee(_gasStart, _outToken, _received);
+  function _encodeCanExec(Order memory _order, uint256 _id)
+    private
+    pure
+    returns (bytes memory)
+  {
+    return abi.encodeWithSelector(this.canExec.selector, _order, _id);
+  }
 
-    // Pay Gelato
-    IERC20(_outToken).safeTransfer(executorModule, txFee);
-
-    // Send remaining tokens to user
-    IERC20(_outToken).safeTransfer(_user, _received.sub(txFee));
+  function _encodeExecParams(Order memory _order, uint256 _id)
+    private
+    pure
+    returns (bytes memory)
+  {
+    return abi.encode(_order, _id);
   }
 
   // ############# Fallback #############
   // solhint-disable-next-line no-empty-blocks
   receive() external payable {}
-
-  // function allowanceDelta(address _user, IERC20 _token)
-  //     public
-  //     view
-  //     returns(uint256 delta, bool isLiquid)
-  // {
-  //     uint256 upcoming = totalToSpend[_user][address(_token)];
-  //     uint256 allowance = _token.allowance(_user, address(this));
-  //     if (allowance >= upcoming) {
-  //         isLiquid = true;
-  //         delta = allowance.sub(upcoming);
-  //     } else {
-  //         delta = upcoming.sub(allowance);
-  //     }
-  // }
 }
