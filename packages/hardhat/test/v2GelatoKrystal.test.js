@@ -5,7 +5,6 @@ const { ok } = require('./canExec');
 const {
   getSubmittedTaskV2,
   getGelatoGasPriceV2,
-  getAggregatedOracles,
   getTokenFromFaucet,
 } = require('./gelatoHelper');
 const SmartWalletSwapImplementation = artifacts.readArtifactSync(
@@ -30,7 +29,6 @@ let gelatoUser;
 let gelatoUserAddress;
 let executor;
 let executorAddress;
-let oracleAggregator;
 let gelatoKrystal;
 
 describe('test Krystal with Gelato V2 - No Gelato Core', async () => {
@@ -67,35 +65,13 @@ describe('test Krystal with Gelato V2 - No Gelato Core', async () => {
       admin,
     );
 
-    const {
-      tokensA,
-      tokensB,
-      oracles,
-      stablecoins,
-      decimals,
-    } = getAggregatedOracles();
-
-    const oracleAggregatorFactory = await ethers.getContractFactory(
-      'OracleAggregator',
-      admin,
-    );
-
-    oracleAggregator = await oracleAggregatorFactory.deploy(
-      wethAddress,
-      tokensA,
-      tokensB,
-      oracles,
-      stablecoins,
-      decimals,
-    );
-
     const gelatoKrystalV2Factory = await ethers.getContractFactory(
       'GelatoKrystalV2',
       admin,
     );
 
     gelatoKrystal = await gelatoKrystalV2Factory.deploy(
-      oracleAggregator.address,
+      network.config.addresses.oracleAggregatorAddress,
       swapProxy.address,
       adminAddress,
       executorAddress,

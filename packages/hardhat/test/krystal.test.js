@@ -118,7 +118,7 @@ describe('test Krystal simple trades', async () => {
   it('trade e2t on kyber', async () => {
     let tokenAddresses = [usdtAddress, usdcAddress, daiAddress];
 
-    let ethAmount = ethers.utils.parseEther('1'); // one eth
+    let ethAmount = ethers.utils.parseEther('0.5'); // half an eth
     for (let i = 0; i < tokenAddresses.length; i++) {
       let token = tokenAddresses[i];
       let data = await swapProxy.getExpectedReturnKyber(
@@ -128,12 +128,11 @@ describe('test Krystal simple trades', async () => {
         8,
         emptyHint,
       );
-      let minRate = (data.expectedRate * 97) / 100;
       await swapProxy.swapKyber(
         ethAddress,
         token,
         ethAmount.toString(),
-        minRate.toString(),
+        data.expectedRate,
         adminAddress,
         8,
         adminAddress,
@@ -141,12 +140,18 @@ describe('test Krystal simple trades', async () => {
         false, // without gas token
         { value: ethAmount.toString(), gasLimit: 2000000 },
       );
-
+      data = await swapProxy.getExpectedReturnKyber(
+        ethAddress,
+        token,
+        ethAmount.toString(),
+        8,
+        emptyHint,
+      );
       await swapProxy.swapKyber(
         ethAddress,
         token,
         ethAmount.toString(),
-        minRate.toString(),
+        data.expectedRate,
         adminAddress,
         8,
         adminAddress,
@@ -161,7 +166,7 @@ describe('test Krystal simple trades', async () => {
     let tokenAddresses = [usdtAddress, usdcAddress, daiAddress];
     let routers = [uniswapRouter, sushiswapRouter];
 
-    let ethAmount = ethers.utils.parseEther('1'); // one eth
+    let ethAmount = ethers.utils.parseEther('0.5'); // half an eth
     for (let i = 0; i < routers.length; i++) {
       for (let j = 0; j < tokenAddresses.length; j++) {
         let token = tokenAddresses[j];
@@ -172,8 +177,7 @@ describe('test Krystal simple trades', async () => {
           tradePath,
           8,
         );
-        let minDestAmount = Math.round((data.destAmount * 97) / 100);
-
+        let minDestAmount = Math.round(data.destAmount * 0.97);
         tradePath[0] = ethAddress; // trade needs to use eth address
         await swapProxy.swapUniswap(
           routers[i],
@@ -217,7 +221,7 @@ describe('test Krystal simple trades', async () => {
         8,
         emptyHint,
       );
-      let minRate = Math.round((data.expectedRate * 97) / 100);
+      let minRate = Math.round(data.expectedRate * 0.97);
 
       await swapProxy.swapKyber(
         tokenAddresses[i],
@@ -260,7 +264,7 @@ describe('test Krystal simple trades', async () => {
           tradePath,
           8,
         );
-        let minDestAmount = Math.round((data.destAmount * 97) / 100);
+        let minDestAmount = Math.round(data.destAmount * 0.97);
 
         tradePath[1] = ethAddress; // trade needs to use eth address
         await swapProxy.swapUniswap(

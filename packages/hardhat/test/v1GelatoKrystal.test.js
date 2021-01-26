@@ -5,7 +5,6 @@ const { GelatoCore } = require('@gelatonetwork/core');
 const {
   getSubmittedTaskReceipt,
   getGelatoGasPrices,
-  getAggregatedOracles,
   getTokenFromFaucet,
 } = require('./gelatoHelper');
 const SmartWalletSwapImplementation = artifacts.readArtifactSync(
@@ -30,7 +29,6 @@ let gelatoUser;
 let gelatoUserAddress;
 let gelatoCore;
 let executor;
-let oracleAggregator;
 let gelatoKrystal;
 
 describe('test Krystal with Gelato V1 - No User Proxy', async () => {
@@ -74,28 +72,6 @@ describe('test Krystal with Gelato V1 - No User Proxy', async () => {
       gasLimit: 5000000,
     });
 
-    const {
-      tokensA,
-      tokensB,
-      oracles,
-      stablecoins,
-      decimals,
-    } = getAggregatedOracles();
-
-    const oracleAggregatorFactory = await ethers.getContractFactory(
-      'OracleAggregator',
-      admin,
-    );
-
-    oracleAggregator = await oracleAggregatorFactory.deploy(
-      wethAddress,
-      tokensA,
-      tokensB,
-      oracles,
-      stablecoins,
-      decimals,
-    );
-
     const gelatoKrystalFactory = await ethers.getContractFactory(
       'GelatoKrystal',
       admin,
@@ -103,7 +79,7 @@ describe('test Krystal with Gelato V1 - No User Proxy', async () => {
 
     gelatoKrystal = await gelatoKrystalFactory.deploy(
       gelatoCore.address,
-      oracleAggregator.address,
+      network.config.addresses.oracleAggregatorAddress,
       swapProxy.address,
       await executor.getAddress(),
       adminAddress, // the platform wallet must be admin or it causes an error in the swap
