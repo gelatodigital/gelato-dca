@@ -94,6 +94,7 @@ describe('test Krystal with Gelato V2 - No Gelato Core', async () => {
     const TWO_MINUTES = 120;
     const NUM_TRADES = 3;
     const dai = await ethers.getContractAt('IERC20Ext', daiAddress);
+    const usdc = await ethers.getContractAt('IERC20Ext', usdcAddress);
     const tradeAmount = utils.parseUnits('1000', '18'); // 1000 DAI
 
     // Get DAI form faucet
@@ -165,6 +166,12 @@ describe('test Krystal with Gelato V2 - No Gelato Core', async () => {
 
       expect(canExecResult).to.be.eq('OK');
 
+      const executorUsdcBefore = await usdc.balanceOf(
+        await executor.getAddress(),
+      );
+      const executorEthBefore = await executor.provider.getBalance(
+        await executor.getAddress(),
+      );
       // Executor executes
       await expect(
         gelatoKrystal.connect(executor).exec(order, id, {
@@ -172,6 +179,47 @@ describe('test Krystal with Gelato V2 - No Gelato Core', async () => {
           gasLimit: 5000000,
         }),
       ).to.emit(gelatoKrystal, 'LogExecSuccess');
+      const executorUsdcAfter = await usdc.balanceOf(
+        await executor.getAddress(),
+      );
+      const executorEthAfter = await executor.provider.getBalance(
+        await executor.getAddress(),
+      );
+      const dollarsReceived =
+        Number(executorUsdcAfter / 10 ** 6) -
+        Number(executorUsdcBefore / 10 ** 6);
+      const ethSpent =
+        Number(utils.formatEther(executorEthBefore)) -
+        Number(utils.formatEther(executorEthAfter));
+      const oracle = await ethers.getContractAt(
+        [
+          'function getExpectedReturnAmount(uint256,address,address) external view returns(uint256 returnAmount, uint256 returnDecimals)',
+        ],
+        network.config.addresses.oracleAggregatorAddress,
+        executor,
+      );
+
+      const data = await oracle.getExpectedReturnAmount(
+        executorUsdcAfter - executorUsdcBefore,
+        usdcAddress,
+        network.config.addresses.ethAddress,
+      );
+      console.log(`    -----------------------------------------`);
+      console.log(
+        `    gas cost: ${ethSpent.toFixed(5)} ETH (${
+          utils.parseEther(ethSpent.toString()) / gelatoGasPrice
+        } gas)`,
+      );
+      console.log(
+        `    received: ${dollarsReceived.toFixed(2)} USDC (worth ${Number(
+          utils.formatEther(data.returnAmount),
+        ).toFixed(5)} ETH)`,
+      );
+      console.log(
+        `    profit: ${(
+          Number(utils.formatEther(data.returnAmount)) - ethSpent
+        ).toFixed(5)} ETH`,
+      );
 
       if (i != NUM_TRADES - 1) {
         // Collect next Task Receipt in cycle

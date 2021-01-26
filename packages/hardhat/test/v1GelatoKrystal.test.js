@@ -161,6 +161,9 @@ describe('test Krystal with Gelato V1 - No User Proxy', async () => {
 
       expect(canExecResult).to.be.eq('OK');
 
+      const executorEthBefore = await executor.provider.getBalance(
+        await executor.getAddress(),
+      );
       // Executor executes
       await expect(
         gelatoCore.connect(executor).exec(taskReceipt, {
@@ -168,16 +171,19 @@ describe('test Krystal with Gelato V1 - No User Proxy', async () => {
           gasLimit: 5000000,
         }),
       ).to.emit(gelatoCore, 'LogExecSuccess');
-      // const tx = await gelatoCore.connect(executor).exec(taskReceipt, {
-      //   gasPrice: gelatoGasPrice,
-      //   gasLimit: 5000000,
-      // });
-      // const r = await admin.provider.getTransactionReceipt(tx.hash);
-      // /* eslint-disable no-console */
-      // console.log(r.logs.length);
-      // const event = gelatoCore.interface.parseLog(r.logs[0]);
-      // /* eslint-disable no-console */
-      // console.log(event);
+      const executorEthAfter = await executor.provider.getBalance(
+        await executor.getAddress(),
+      );
+      const ethSpent =
+        Number(utils.formatEther(executorEthBefore)) -
+        Number(utils.formatEther(executorEthAfter));
+      console.log(`    -----------------------------------------`);
+      console.log(
+        `    exec gas cost: ${ethSpent.toFixed(5)} ETH (${Number(
+          utils.parseEther(ethSpent.toString()) / gelatoGasPrice,
+        ).toFixed(2)} gas)`,
+      );
+      console.log(`    -----------------------------------------`);
 
       if (i != NUM_TRADES - 1) {
         // Collect next Task Receipt in cycle
