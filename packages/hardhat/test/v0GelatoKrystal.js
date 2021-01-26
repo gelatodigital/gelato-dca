@@ -161,7 +161,7 @@ describe('test Krystal with Gelato V0 - Standard Gelato Integration', async () =
       .multiProvide(
         await executor.getAddress(), // executor
         [taskSpec], // Task Specs
-        [myGelatoProvider.module], // Provider Module
+        [], // Provider Module
         {
           value: ethers.utils.parseEther('5'),
         },

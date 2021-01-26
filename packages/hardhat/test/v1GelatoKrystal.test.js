@@ -5,7 +5,6 @@ const { GelatoCore } = require('@gelatonetwork/core');
 const {
   getSubmittedTaskReceipt,
   getGelatoGasPrices,
-  getAggregatedOracles,
   getTokenFromFaucet,
 } = require('./gelatoHelper');
 const SmartWalletSwapImplementation = artifacts.readArtifactSync(
@@ -30,7 +29,6 @@ let gelatoUser;
 let gelatoUserAddress;
 let gelatoCore;
 let executor;
-let oracleAggregator;
 let gelatoKrystal;
 
 describe('test Krystal with Gelato V1 - No User Proxy', async () => {
@@ -74,28 +72,6 @@ describe('test Krystal with Gelato V1 - No User Proxy', async () => {
       gasLimit: 5000000,
     });
 
-    const {
-      tokensA,
-      tokensB,
-      oracles,
-      stablecoins,
-      decimals,
-    } = getAggregatedOracles();
-
-    const oracleAggregatorFactory = await ethers.getContractFactory(
-      'OracleAggregator',
-      admin,
-    );
-
-    oracleAggregator = await oracleAggregatorFactory.deploy(
-      wethAddress,
-      tokensA,
-      tokensB,
-      oracles,
-      stablecoins,
-      decimals,
-    );
-
     const gelatoKrystalFactory = await ethers.getContractFactory(
       'GelatoKrystal',
       admin,
@@ -103,7 +79,7 @@ describe('test Krystal with Gelato V1 - No User Proxy', async () => {
 
     gelatoKrystal = await gelatoKrystalFactory.deploy(
       gelatoCore.address,
-      oracleAggregator.address,
+      network.config.addresses.oracleAggregatorAddress,
       swapProxy.address,
       await executor.getAddress(),
       adminAddress, // the platform wallet must be admin or it causes an error in the swap
@@ -185,6 +161,9 @@ describe('test Krystal with Gelato V1 - No User Proxy', async () => {
 
       expect(canExecResult).to.be.eq('OK');
 
+      const executorEthBefore = await executor.provider.getBalance(
+        await executor.getAddress(),
+      );
       // Executor executes
       await expect(
         gelatoCore.connect(executor).exec(taskReceipt, {
@@ -192,16 +171,19 @@ describe('test Krystal with Gelato V1 - No User Proxy', async () => {
           gasLimit: 5000000,
         }),
       ).to.emit(gelatoCore, 'LogExecSuccess');
-      // const tx = await gelatoCore.connect(executor).exec(taskReceipt, {
-      //   gasPrice: gelatoGasPrice,
-      //   gasLimit: 5000000,
-      // });
-      // const r = await admin.provider.getTransactionReceipt(tx.hash);
-      // /* eslint-disable no-console */
-      // console.log(r.logs.length);
-      // const event = gelatoCore.interface.parseLog(r.logs[0]);
-      // /* eslint-disable no-console */
-      // console.log(event);
+      const executorEthAfter = await executor.provider.getBalance(
+        await executor.getAddress(),
+      );
+      const ethSpent =
+        Number(utils.formatEther(executorEthBefore)) -
+        Number(utils.formatEther(executorEthAfter));
+      console.log(`    -----------------------------------------`);
+      console.log(
+        `    exec gas cost: ${ethSpent.toFixed(5)} ETH (${Number(
+          utils.parseEther(ethSpent.toString()) / gelatoGasPrice,
+        ).toFixed(2)} gas)`,
+      );
+      console.log(`    -----------------------------------------`);
 
       if (i != NUM_TRADES - 1) {
         // Collect next Task Receipt in cycle

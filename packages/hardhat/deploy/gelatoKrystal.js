@@ -19,7 +19,7 @@ module.exports = async (hre) => {
     from: deployer,
     args: [
       hre.network.config.addresses.gelatoCoreAddress,
-      (await deployments.get('OracleAggregator')).address,
+      hre.network.config.addresses.oracleAggregatorAddress,
       hre.network.config.addresses.swapProxyAddress,
       hre.network.config.addresses.executorAddress,
       hre.network.config.addresses.platformWalletAddress,
@@ -31,4 +31,3 @@ module.exports = async (hre) => {
 };
 
 module.exports.tags = ['GelatoKrystal'];
-module.exports.dependencies = ['OracleAggregator'];
