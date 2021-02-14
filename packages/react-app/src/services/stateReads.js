@@ -1,9 +1,8 @@
 import { ethers } from 'ethers';
 import { getMiniAddress } from '../utils/helpers';
 import { addresses, abis } from '@gelato-krystal/contracts';
-import { GelatoCore } from '@gelatonetwork/core';
 
-const { GELATO_CORE, GELATO_KRYSTAL } = addresses;
+const { GELATO_GAS_PRICE_ORACLE, GELATO_KRYSTAL } = addresses;
 const { GelatoKrystalAbi } = abis;
 
 export const getUserAddress = async (provider) => {
@@ -33,24 +32,13 @@ export const getGelatoKrystal = async (user) => {
 
 export const getGelatoGasPrice = async (user) => {
   const signer = await user.getSigner();
-  const gelatoCoreContract = new ethers.Contract(
-    GELATO_CORE,
-    GelatoCore.abi,
-    signer,
-  );
-
-  const oracleAbi = ['function latestAnswer() view returns (int256)'];
-
-  const gelatoGasPriceOracleAddress = await gelatoCoreContract.gelatoGasPriceOracle();
-
-  // Get gelatoGasPriceOracleAddress
   const gelatoGasPriceOracle = new ethers.Contract(
-    gelatoGasPriceOracleAddress,
-    oracleAbi,
+    GELATO_GAS_PRICE_ORACLE,
+    ['function latestAnswer() view returns (int256)'],
     signer,
   );
 
-  // lastAnswer is used by GelatoGasPriceOracle as well as the Chainlink Oracle
+  // latestAnswer is used by GelatoGasPriceOracle as well as the Chainlink Oracle
   return await gelatoGasPriceOracle.latestAnswer();
 };
 
@@ -79,17 +67,4 @@ export const getTokenBalanceString = async (
     decimals,
   );
   return `${parseFloat(userBalanceHumanReadable).toFixed(8)} ${tokenSymbol}`;
-};
-
-export const getCanExecStatus = async (user, taskReceipt) => {
-  const signer = await user.getSigner();
-
-  const gelatoCore = new ethers.Contract(GELATO_CORE, GelatoCore.abi, signer);
-  const canExecStatus = await gelatoCore.canExec(
-    taskReceipt,
-    5000000,
-    ethers.utils.parseUnits('40', 'gwei'),
-  );
-  console.log(taskReceipt.id.toString());
-  console.log(canExecStatus);
 };
