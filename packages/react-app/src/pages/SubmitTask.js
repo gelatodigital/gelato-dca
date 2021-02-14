@@ -54,7 +54,6 @@ const SubmitTask = ({ userAccount }) => {
   };
 
   const approve = async () => {
-    console.log("HELLO");
     if (totalAmount === 0) {
       console.log('Insufficient total amount');
       return;
