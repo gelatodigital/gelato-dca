@@ -49,11 +49,12 @@ const SubmitTask = ({ userAccount }) => {
       WETH,
       intervalSeconds,
       ethers.utils.parseUnits(totalAmount, '18').div(BigNumber.from(tradeNum)),
-      tradeNum,
+      tradeNum-1,
     );
   };
 
   const approve = async () => {
+    console.log("HELLO");
     if (totalAmount === 0) {
       console.log('Insufficient total amount');
       return;
