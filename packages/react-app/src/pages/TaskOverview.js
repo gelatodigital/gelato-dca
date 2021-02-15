@@ -5,9 +5,8 @@ import { useTable, useSortBy } from 'react-table';
 import styled from 'styled-components';
 // Graph QL Query
 import { useQuery } from '@apollo/react-hooks';
-import GET_TASK_RECEIPT_WRAPPERS from '../graphql/gelato';
+import GET_GELATO_KRYSTAL_TASKS from '../graphql/gelatoKrystal';
 import { sleep, decodeWithoutSignature } from '../utils/helpers';
-import { getCanExecStatus } from '../services/stateReads';
 import { utils } from 'ethers';
 import { addresses } from '@gelato-krystal/contracts';
 const { GELATO_KRYSTAL } = addresses;
@@ -46,11 +45,11 @@ const Styles = styled.div`
 
 const TaskOverview = ({ userAddress, userAccount }) => {
   const { loading, error, data, refetch, fetchMore } = useQuery(
-    GET_TASK_RECEIPT_WRAPPERS,
+    GET_GELATO_KRYSTAL_TASKS,
     {
       variables: {
         skip: 0,
-        proxyAddress: GELATO_KRYSTAL.toLowerCase(),
+        userAddress: userAddress.toLowerCase(),
       },
     },
   );
@@ -103,24 +102,6 @@ const TaskOverview = ({ userAddress, userAccount }) => {
     [],
   );
 
-  const decodeUserAddress = (data) => {
-    return String(
-      decodeWithoutSignature(
-        ['address', 'address', 'uint256', 'address', 'uint256'],
-        data,
-      )[3],
-    );
-  };
-
-  const decodeAmountPerTrade = (data) => {
-    return String(
-      decodeWithoutSignature(
-        ['address', 'address', 'uint256', 'address', 'uint256'],
-        data,
-      )[2],
-    );
-  };
-
   const {
     getTableProps,
     getTableBodyProps,
@@ -132,10 +113,8 @@ const TaskOverview = ({ userAddress, userAccount }) => {
   const createRowData = (data) => {
     const newRows = [];
     // Filter all tasks by known Tash Hashes
-    for (let wrapper of data.taskReceiptWrappers) {
-      const decodedUserAddress = decodeUserAddress(
-        wrapper.taskReceipt.tasks[0].actions[0].data,
-      );
+    for (let wrapper of data.gelatoKrystalTasks) {
+      const decodedUserAddress = wrapper.user.id;
       console.log(decodedUserAddress);
       console.log(userAddress);
       if (
@@ -143,9 +122,6 @@ const TaskOverview = ({ userAddress, userAccount }) => {
       ) {
         continue;
       }
-
-      // Check CanExec
-      getCanExecStatus(userAccount, wrapper.taskReceipt);
 
       const execUrl = `https://ropsten.etherscan.io/tx/${wrapper.executionHash}`;
       const submitUrl = `https://ropsten.etherscan.io/tx/${wrapper.submissionHash}`;
@@ -158,10 +134,8 @@ const TaskOverview = ({ userAddress, userAccount }) => {
           </a>
         ),
         amount: utils.formatUnits(
-          decodeAmountPerTrade(
-            wrapper.taskReceipt.tasks[0].actions[0].data,
+            wrapper.amountPerTrade,
             '18',
-          ),
         ),
         execDate:
           wrapper.executionDate !== null

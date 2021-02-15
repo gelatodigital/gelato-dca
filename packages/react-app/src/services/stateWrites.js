@@ -9,7 +9,7 @@ export const submitOrder = async (
   outToken,
   delay,
   amountPerTrade,
-  nTrades,
+  nTradesLeft,
   minSlippage = 9001,
   maxSlippage = 9000,
   gasPriceCeil = 0,
@@ -21,17 +21,15 @@ export const submitOrder = async (
   };
 
   try {
-    const submitTx = await gelatoKrystal.submitDCAKyber(
-      {
-        _inToken: inToken,
-        _outToken: outToken,
-        _amountPerTrade: amountPerTrade,
-        _nTrades: nTrades,
-        _minSlippage: minSlippage,
-        _maxSlippage: maxSlippage,
-        _delay: delay,
-        _gasPriceCeil: gasPriceCeil,
-      },
+    const submitTx = await gelatoKrystal.submit(
+      inToken,
+      outToken,
+      amountPerTrade,
+      nTradesLeft,
+      minSlippage,
+      maxSlippage,
+      delay,
+      gasPriceCeil,
       options,
     );
     await submitTx.wait();
