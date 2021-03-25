@@ -1,5 +1,5 @@
-const GelatoKrystal = require('./abis/GelatoKrystal.json');
+const GelatoDCA = require('./abis/GelatoDCA.json');
 
 module.exports = {
-  GelatoKrystalAbi: GelatoKrystal,
+  GelatoKrystalAbi: GelatoDCA,
 };

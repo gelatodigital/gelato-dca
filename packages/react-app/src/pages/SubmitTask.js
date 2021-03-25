@@ -49,7 +49,8 @@ const SubmitTask = ({ userAccount }) => {
       WETH,
       intervalSeconds,
       ethers.utils.parseUnits(totalAmount, '18').div(BigNumber.from(tradeNum)),
-      tradeNum-1,
+      tradeNum,
+      cycleId,
     );
   };
 

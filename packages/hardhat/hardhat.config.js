@@ -95,6 +95,10 @@ module.exports = {
       accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
       addresses: ropstenAddresses,
     },
+    mainnet: {
+      url: `https://eth-mainnet.alchemyapi.io/v2/${ALCHEMY_ID}`,
+      addresses: mainnetAddresses,
+    }
   },
   solidity: {
     compilers: [
