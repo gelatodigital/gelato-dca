@@ -1,4 +1,4 @@
-const { artifacts, ethers, deployments, network } = require("hardhat");
+const { ethers, deployments, network } = require("hardhat");
 const { utils, BigNumber } = ethers;
 const { expect } = require("chai");
 const { canExec } = require("../helpers/canExecKrystal");
@@ -8,22 +8,15 @@ const {
   getGelatoGasPriceV2,
   getTokenFromFaucet,
 } = require("../helpers/gelatoHelper");
-const SmartWalletSwapImplementation = artifacts.readArtifactSync(
-  "SmartWalletSwapImplementation"
-);
 
 // mainnet addresses
-const kyberProxy = network.config.KyberProxy;
 const uniswapRouter = network.config.UniswapRouter;
 const sushiswapRouter = network.config.SushiswapRouter;
 const ethAddress = network.config.ETH;
-const wethAddress = network.config.WETH;
-const usdtAddress = network.config.USDT;
 const usdcAddress = network.config.USDC;
 const daiAddress = network.config.DAI;
 const gasPriceOracleAddress = network.config.GelatoGasPriceOracle;
 
-let swapImplementation;
 let swapProxy;
 let owner;
 let ownerAddress;
@@ -62,8 +55,6 @@ describe("Gelato Krystal Test", function () {
       "SmartWalletSwapImplementation",
       network.config.SwapProxy
     );
-
-
 
     gelatoKrystal = await ethers.getContractAt("GelatoKrystal", (await deployments.get("GelatoKrystal")).address)
 

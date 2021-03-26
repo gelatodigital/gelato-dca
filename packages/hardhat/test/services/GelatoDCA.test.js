@@ -10,7 +10,6 @@ const {
 } = require("../helpers/gelatoHelper");
 
 // mainnet addresses
-const kyberProxy = network.config.KyberProxy;
 const uniswapRouter = network.config.UniswapRouter;
 const sushiswapRouter = network.config.SushiswapRouter;
 const ethAddress = network.config.ETH;
