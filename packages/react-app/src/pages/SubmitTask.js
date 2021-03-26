@@ -7,7 +7,6 @@ const { DAI, WETH } = addresses;
 
 const SubmitTask = ({ userAccount }) => {
   const [loading, setLoading] = useState(false);
-  const [inputs, setInputs] = useState({});
   const [totalAmount, setTotalAmount] = useState(30);
   const [intervalSeconds, setIntervalSeconds] = useState(120);
   const [tradeNum, setTradeNum] = useState(3);
@@ -38,7 +37,7 @@ const SubmitTask = ({ userAccount }) => {
       console.log('0 Interval seconds not allowed');
       return;
     }
-    if (parseInt(inputs.tradeNum) > 10) {
+    if (parseInt(tradeNum) > 10) {
       console.log('Max Trade Number is 10');
       return;
     }
@@ -50,7 +49,6 @@ const SubmitTask = ({ userAccount }) => {
       intervalSeconds,
       ethers.utils.parseUnits(totalAmount, '18').div(BigNumber.from(tradeNum)),
       tradeNum,
-      cycleId,
     );
   };
 
@@ -84,7 +82,7 @@ const SubmitTask = ({ userAccount }) => {
             type="number"
             value={totalAmount}
             onChange={handleTotalAmountChange}
-            defaultValue={inputs.defaultValueAmount}
+            defaultValue={100}
           />
         </ViewCard>
 
@@ -98,7 +96,7 @@ const SubmitTask = ({ userAccount }) => {
             type="number"
             value={intervalSeconds}
             onChange={handleIntervalSecondsChange}
-            defaultValue={inputs.defaultValueInterval}
+            defaultValue={240}
           />
         </ViewCard>
 
@@ -112,7 +110,7 @@ const SubmitTask = ({ userAccount }) => {
             type="number"
             value={tradeNum}
             onChange={handleTradeNumChange}
-            defaultValue={inputs.defaultValueTradeNum}
+            defaultValue={3}
           />
         </ViewCard>
       </CardWrapper>
