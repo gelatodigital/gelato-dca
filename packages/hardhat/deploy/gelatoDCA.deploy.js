@@ -6,28 +6,26 @@ module.exports = async (hre) => {
   }*/
   if (hre.network.name === 'mainnet') {
     console.log(
-      '\n\n Deploying GelatoKrystal to mainnet. Hit ctrl + c to abort',
+      '\n\n Deploying GelatoDCA to mainnet. Hit ctrl + c to abort',
     );
-    console.log('❗ GELATO KRYSTAL DEPLOYMENT: VERIFY');
+    console.log('❗ GELATO DCA DEPLOYMENT: VERIFY');
     await sleep(10000);
   }
   const { deployments } = hre;
   const { deploy } = deployments;
   const { deployer } = await hre.getNamedAccounts();
 
-  await deploy('GelatoKrystal', {
+  await deploy('GelatoDCA', {
     from: deployer,
     args: [
-      hre.network.config.addresses.gelatoCoreAddress,
-      hre.network.config.addresses.oracleAggregatorAddress,
-      hre.network.config.addresses.swapProxyAddress,
-      hre.network.config.addresses.executorAddress,
-      hre.network.config.addresses.platformWalletAddress,
+      hre.network.config.KyberProxy,
+      hre.network.config.UniswapRouter,
+      hre.network.config.SushiswapRouter,
+      hre.network.config.Gelato,
     ],
     gasPrice: hre.ethers.utils.parseUnits('10', 'gwei'),
     gasLimit: 5000000,
-    value: 1,
   });
 };
 
-module.exports.tags = ['GelatoKrystal'];
+module.exports.tags = ['GelatoDCA'];
