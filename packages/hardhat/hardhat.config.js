@@ -4,7 +4,6 @@ require('hardhat-deploy');
 require('hardhat-gas-reporter');
 require('dotenv').config();
 const { task } = require('hardhat/config');
-const { GelatoCore } = require('@gelatonetwork/core');
 
 const ALCHEMY_ID = process.env.ALCHEMY_ID;
 const PRIVATE_KEY_TEST = process.env.PRIVATE_KEY_TEST;
@@ -36,6 +35,7 @@ const mainnetAddresses = {
   USDT: '0xdac17f958d2ee523a2206206994597c13d831ec7',
   WETH: '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2',
   GelatoExecutor: '0x3b110ce530bfc5ce5a966fe7fe13f0ea7d56b734',
+  KrystalPlatformWallet: '0x3ffff2f4f6c0831fac59534694acd14ac2ea501b'
 };
 
 const ropstenAddresses = {};
@@ -51,19 +51,12 @@ module.exports = {
     enabled: process.env.REPORT_GAS ? true : false,
     maxMethodDiff: 25,
     coinmarketcap: process.env.COINMARKETCAP_API_KEY,
-    remoteContracts: [
-      {
-        name: 'GelatoCore',
-        abi: GelatoCore.abi,
-        address: mainnetAddresses.gelatoCoreAddress,
-      },
-    ],
   },
   networks: {
     hardhat: {
       forking: {
         url: `https://eth-mainnet.alchemyapi.io/v2/${ALCHEMY_ID}`,
-        blockNumber: 12115360,
+        blockNumber: 12115900,
       },
       ...mainnetAddresses,
     },

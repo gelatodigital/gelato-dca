@@ -1,35 +1,35 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.0;
 
-import {wdiv} from "../vendor/DSMath.sol";
+import {
+    ISmartWalletSwapImplementation
+} from "./interfaces/krystal/ISmartWalletSwapImplementation.sol";
+import {wdiv} from "./vendor/DSMath.sol";
 import {
     IERC20,
     SafeERC20
-} from "../vendor/openzeppelin/contracts/token/ERC20/SafeERC20.sol";
+} from "./vendor/openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import {
     ReentrancyGuard
-} from "../vendor/openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {Utils} from "../vendor/kyber/utils/Utils.sol";
-import {IKyberProxy} from "../vendor/kyber/utils/IKyberProxy.sol";
+} from "./vendor/openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Utils} from "./vendor/kyber/utils/Utils.sol";
+import {IKyberProxy} from "./vendor/kyber/utils/IKyberProxy.sol";
 import {
     IChainlinkOracle
-} from "../interfaces/chainlink/IChainlinkOracle.sol";
-import {IOracleAggregator} from "../interfaces/gelato/IOracleAggregator.sol";
-import {ITaskStorage} from "../interfaces/gelato/ITaskStorage.sol";
+} from "./interfaces/chainlink/IChainlinkOracle.sol";
+import {IOracleAggregator} from "./interfaces/gelato/IOracleAggregator.sol";
+import {ITaskStorage} from "./interfaces/gelato/ITaskStorage.sol";
 import {
     IUniswapV2Router02
-} from "../interfaces/uniswap/IUniswapV2Router02.sol";
-import {_to18Decimals} from "./functions/FToken.sol";
-import {SimpleServiceStandard} from "./standards/SimpleServiceStandard.sol";
-import {
-    ReentrancyGuard
-} from "../vendor/openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {_transferEthOrToken} from "./functions/FPayment.sol";
-import {ETH} from "./constants/CTokens.sol";
-import {Fee} from "./structs/SGelato.sol";
-import {IGelato} from "../interfaces/gelato/IGelato.sol";
+} from "./interfaces/uniswap/IUniswapV2Router02.sol";
+import {_to18Decimals} from "./gelato/functions/FToken.sol";
+import {SimpleServiceStandard} from "./gelato/standards/SimpleServiceStandard.sol";
+import {_transferEthOrToken} from "./gelato/functions/FPayment.sol";
+import {ETH} from "./gelato/constants/CTokens.sol";
+import {Fee} from "./gelato/structs/SGelato.sol";
+import {IGelato} from "./interfaces/gelato/IGelato.sol";
 
-contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
+contract GelatoKrystal is SimpleServiceStandard, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     struct SubmitOrder {
@@ -61,42 +61,39 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
     enum Dex {KYBER, UNISWAP, SUSHISWAP}
 
     bytes public constant HINT = "";
-    uint256 internal constant _MAX_AMOUNT = type(uint256).max;
+    uint256 public constant TOTAL_BPS = 10000;
 
+    ISmartWalletSwapImplementation public immutable smartWalletSwap;
     IUniswapV2Router02 public immutable uniRouterV2;
     IUniswapV2Router02 public immutable sushiRouterV2;
-    IKyberProxy public immutable kyberProxy;
-
-    mapping(address => mapping(address => uint256)) public platformWalletFees;
 
     event LogTaskSubmitted(uint256 indexed id, ExecOrder order);
     event LogTaskCancelled(uint256 indexed id, ExecOrder order);
     event LogTaskUpdated(uint256 indexed id, ExecOrder order);
-    event LogDCATrade(uint256 indexed id, ExecOrder order, uint256 outAmount);
-    event ClaimedPlatformFees(
-        address[] wallets,
-        address[] tokens,
-        address claimer
+    event LogKrystalTrade(
+        uint256 indexed id,
+        ExecOrder order,
+        uint256 amountOut
     );
 
     constructor(
-        IKyberProxy _kyberProxy,
+        ISmartWalletSwapImplementation _smartWalletSwap,
         IUniswapV2Router02 _uniRouterV2,
         IUniswapV2Router02 _sushiRouterV2,
         address _gelato
     ) SimpleServiceStandard(_gelato) {
-        kyberProxy = _kyberProxy;
+        smartWalletSwap = _smartWalletSwap;
         uniRouterV2 = _uniRouterV2;
         sushiRouterV2 = _sushiRouterV2;
     }
 
-    function submit(SubmitOrder memory _order, bool _isSubmitAndExec)
+    function submit(SubmitOrder memory _order, bool isSubmitAndExec)
         public
         payable
     {
         if (_order.inToken == ETH) {
             uint256 value =
-                _isSubmitAndExec
+                isSubmitAndExec
                     ? _order.amountPerTrade * (_order.numTrades + 1)
                     : _order.amountPerTrade * _order.numTrades;
             require(
@@ -140,14 +137,17 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
         submit(_order, true);
 
         // 2. Exec 1st Trade now
-        if (_order.inToken != ETH) {
+        uint256 ethToSend;
+        if (_order.inToken == ETH) {
+            ethToSend = _order.amountPerTrade;
+        } else {
             IERC20(_order.inToken).safeTransferFrom(
                 msg.sender,
                 address(this),
                 _order.amountPerTrade
             );
             IERC20(_order.inToken).safeIncreaseAllowance(
-                getProtocolAddress(_protocol),
+                address(smartWalletSwap),
                 _order.amountPerTrade
             );
         }
@@ -159,17 +159,19 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
                 _order.amountPerTrade,
                 _minReturnOrRate,
                 payable(msg.sender),
-                payable(_order.platformWallet),
+                ethToSend,
+                _order.platformWallet,
                 _order.platformFeeBps
             );
         } else {
-            _doUniswapTrade(
+            _doUniTrade(
                 _protocol == Dex.UNISWAP ? uniRouterV2 : sushiRouterV2,
                 _tradePath,
                 _order.amountPerTrade,
                 _minReturnOrRate,
                 payable(msg.sender),
-                payable(_order.platformWallet),
+                ethToSend,
+                _order.platformWallet,
                 _order.platformFeeBps
             );
         }
@@ -183,7 +185,7 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
         if (_order.inToken == ETH) {
             uint256 refundAmount = _order.amountPerTrade * _order.nTradesLeft;
             (bool success, ) = _order.user.call{value: refundAmount}("");
-            require(success, "GelatoDCA.cancel: Could not refund ETH");
+            require(success, "GelatoKrystal.cancel: refund reverted");
         }
 
         emit LogTaskCancelled(_id, _order);
@@ -197,7 +199,7 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
     ) external payable nonReentrant {
         require(
             _order.nTradesLeft != _newNumTradesLeft,
-            "GelatoDCA.editNumTrades: order does not need update"
+            "GelatoKrystal.editNumTrades: order does not need update"
         );
         require(_newNumTradesLeft > 0, "GelatoDCA.editNumTrades: cannot be 0");
         ExecOrder memory newOrder =
@@ -220,8 +222,12 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
                 uint256 refundAmount =
                     _order.amountPerTrade *
                         (_order.nTradesLeft - _newNumTradesLeft);
+
                 (bool success, ) = _order.user.call{value: refundAmount}("");
-                require(success, "GelatoDCA.editNumTrades: revert on transfer");
+                require(
+                    success,
+                    "GelatoKrystal.editNumTrades: revert on transfer"
+                );
             } else {
                 uint256 topUpAmount =
                     _order.amountPerTrade *
@@ -229,33 +235,12 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
 
                 require(
                     topUpAmount == msg.value,
-                    "GelatoDCA.editNumTrades: mismatching amount of ETH deposited"
+                    "GelatoKrystal.editNumTrades: mismatching amount of ETH deposited"
                 );
             }
         }
 
         emit LogTaskUpdated(_id, newOrder);
-    }
-
-    function claimPlatformFees(
-        address[] calldata _platformWallets,
-        address[] calldata _tokens
-    ) external nonReentrant {
-        for (uint256 i = 0; i < _platformWallets.length; i++) {
-            for (uint256 j = 0; j < _tokens.length; j++) {
-                uint256 fee =
-                    platformWalletFees[_platformWallets[i]][_tokens[j]];
-                if (fee > 1) {
-                    platformWalletFees[_platformWallets[i]][_tokens[j]] = 1;
-                    _transferEthOrToken(
-                        payable(_platformWallets[i]),
-                        _tokens[j],
-                        fee - 1
-                    );
-                }
-            }
-        }
-        emit ClaimedPlatformFees(_platformWallets, _tokens, msg.sender);
     }
 
     // solhint-disable-next-line function-max-lines
@@ -284,11 +269,11 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
         }
 
         // action exec
-        uint256 outAmount;
+        uint256 amountOut;
         if (_protocol == Dex.KYBER) {
-            outAmount = _actionKyber(_order, _fee.amount, _fee.isOutToken);
+            amountOut = _actionKyber(_order, _fee.amount, _fee.isOutToken);
         } else {
-            outAmount = _actionUniOrSushi(
+            amountOut = _actionUniOrSushi(
                 _order,
                 _protocol,
                 _tradePath,
@@ -301,11 +286,11 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
             _transferEthOrToken(
                 payable(_order.user),
                 _order.outToken,
-                outAmount
+                amountOut
             );
         }
 
-        emit LogDCATrade(_id, _order, outAmount);
+        emit LogKrystalTrade(_id, _order, amountOut);
     }
 
     function isTaskSubmitted(ExecOrder calldata _order, uint256 _id)
@@ -321,7 +306,7 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
         view
         returns (uint256 minReturn)
     {
-        // 4. Rate Check
+        // Rate Check
         (uint256 idealReturn, ) =
             IOracleAggregator(IGelato(gelato).getOracleAggregator())
                 .getExpectedReturnAmount(
@@ -340,8 +325,8 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
             // solhint-disable-next-line not-rely-on-time
             block.timestamp - (_order.lastExecutionTime + _order.delay);
 
-        uint256 minSlippageFactor = BPS - _order.minSlippage;
-        uint256 maxSlippageFactor = BPS - _order.maxSlippage;
+        uint256 minSlippageFactor = TOTAL_BPS - _order.minSlippage;
+        uint256 maxSlippageFactor = TOTAL_BPS - _order.maxSlippage;
         uint256 slippage;
         if (minSlippageFactor > timeSinceCanExec) {
             slippage = minSlippageFactor - timeSinceCanExec;
@@ -351,7 +336,7 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
             slippage = maxSlippageFactor;
         }
 
-        minReturn = (idealReturn * slippage) / BPS;
+        minReturn = (idealReturn * slippage) / TOTAL_BPS;
     }
 
     function isSwapPossible(address _inToken, address _outToken)
@@ -371,16 +356,26 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
         uint256 _fee,
         bool _outTokenFee
     ) private returns (uint256 received) {
-        (uint256 inAmount, uint256 minReturn, address payable receiver) =
-            _preExec(_order, _fee, _outTokenFee, Dex.KYBER);
+        (
+            uint256 ethToSend,
+            uint256 sellAmount,
+            uint256 minReturn,
+            address payable receiver
+        ) = _preExec(_order, _fee, _outTokenFee);
 
         received = _doKyberTrade(
             _order.inToken,
             _order.outToken,
-            inAmount,
-            _getKyberRate(inAmount, minReturn, _order.inToken, _order.outToken),
+            sellAmount,
+            _getKyberRate(
+                sellAmount,
+                minReturn,
+                _order.inToken,
+                _order.outToken
+            ),
             receiver,
-            payable(_order.platformWallet),
+            ethToSend,
+            _order.platformWallet,
             _order.platformFeeBps
         );
 
@@ -390,26 +385,25 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
     }
 
     function _doKyberTrade(
-        address _inToken,
-        address _outToken,
-        uint256 _inAmount,
-        uint256 _minRate,
-        address payable _receiver,
-        address payable _platformWallet,
+        address inToken,
+        address outToken,
+        uint256 sellAmount,
+        uint256 minRate,
+        address payable receiver,
+        uint256 ethToSend,
+        address _platformWallet,
         uint256 _platformFeeBps
     ) private returns (uint256 received) {
-        uint256 ethToSend = _inToken == ETH ? _inAmount : uint256(0);
-
-        received = kyberProxy.tradeWithHintAndFee{value: ethToSend}(
-            IERC20(_inToken),
-            _inAmount,
-            IERC20(_outToken),
-            _receiver,
-            _MAX_AMOUNT,
-            _minRate,
-            _platformWallet,
+        received = smartWalletSwap.swapKyber{value: ethToSend}(
+            IERC20(inToken),
+            IERC20(outToken),
+            sellAmount,
+            minRate,
+            receiver,
             _platformFeeBps,
-            HINT
+            payable(_platformWallet),
+            HINT,
+            false
         );
     }
 
@@ -420,8 +414,12 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
         uint256 _fee,
         bool _outTokenFee
     ) private returns (uint256 received) {
-        (uint256 inAmount, uint256 minReturn, address payable receiver) =
-            _preExec(_order, _fee, _outTokenFee, _protocol);
+        (
+            uint256 ethToSend,
+            uint256 sellAmount,
+            uint256 minReturn,
+            address payable receiver
+        ) = _preExec(_order, _fee, _outTokenFee);
 
         require(
             _order.inToken == _tradePath[0] &&
@@ -429,14 +427,14 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
             "GelatoDCA.action: trade path does not match order."
         );
 
-        received = _doUniswapTrade(
-            _protocol == Dex.UNISWAP ? uniRouterV2 : sushiRouterV2,
+        received = _doUniTrade(
+            _order,
+            _protocol,
             _tradePath,
-            inAmount,
+            sellAmount,
             minReturn,
             receiver,
-            payable(_order.platformWallet),
-            _order.platformFeeBps
+            ethToSend
         );
 
         if (_outTokenFee) {
@@ -444,77 +442,59 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
         }
     }
 
-    // @dev fee will always be paid be srcToken
-    // solhint-disable-next-line function-max-lines
-    function _doUniswapTrade(
-        IUniswapV2Router02 _router,
+    function _doUniTrade(
+        ExecOrder memory _order,
+        Dex _protocol,
         address[] memory _tradePath,
-        uint256 _inAmount,
-        uint256 _minReturn,
-        address payable _receiver,
-        address payable _platformWallet,
-        uint256 _platformFeeBps
+        uint256 sellAmount,
+        uint256 minReturn,
+        address payable receiver,
+        uint256 ethToSend
     ) private returns (uint256 received) {
-        uint256 feeAmount = (_inAmount * _platformFeeBps) / BPS;
-        uint256 actualSellAmount = _inAmount - feeAmount;
-        address actualInToken;
-        address actualOutToken;
-        {
-            uint256 tradeLen = _tradePath.length;
-            actualInToken = _tradePath[0];
-            actualOutToken = _tradePath[tradeLen - 1];
-            if (_tradePath[0] == address(ETH)) {
-                _tradePath[0] = _router.WETH();
-            }
-            if (_tradePath[tradeLen - 1] == address(ETH)) {
-                _tradePath[tradeLen - 1] = _router.WETH();
-            }
-
-            // add platform fee to platform wallet account
-            _addFeeToPlatform(_platformWallet, actualInToken, feeAmount);
-        }
-
-        uint256[] memory amounts;
-        if (actualInToken == ETH) {
-            amounts = _router.swapExactETHForTokens{value: actualSellAmount}(
-                _minReturn,
-                _tradePath,
-                _receiver,
-                _MAX_AMOUNT
-            );
-        } else {
-            if (actualOutToken == address(ETH)) {
-                amounts = _router.swapExactTokensForETH(
-                    actualSellAmount,
-                    _minReturn,
-                    _tradePath,
-                    _receiver,
-                    _MAX_AMOUNT
-                );
-            } else {
-                amounts = _router.swapExactTokensForTokens(
-                    actualSellAmount,
-                    _minReturn,
-                    _tradePath,
-                    _receiver,
-                    _MAX_AMOUNT
-                );
-            }
-        }
-
-        return amounts[amounts.length - 1];
+        received = _doUniTrade(
+            _protocol == Dex.UNISWAP ? uniRouterV2 : sushiRouterV2,
+            _tradePath,
+            sellAmount,
+            minReturn,
+            receiver,
+            ethToSend,
+            _order.platformWallet,
+            _order.platformFeeBps
+        );
     }
 
-    // solhint-disable function-max-lines
+    function _doUniTrade(
+        IUniswapV2Router02 router,
+        address[] memory tradePath,
+        uint256 sellAmount,
+        uint256 minReturn,
+        address payable receiver,
+        uint256 ethToSend,
+        address _platformWallet,
+        uint256 _platformFeeBps
+    ) private returns (uint256 received) {
+        received = smartWalletSwap.swapUniswap{value: ethToSend}(
+            router,
+            sellAmount,
+            minReturn,
+            tradePath,
+            receiver,
+            _platformFeeBps,
+            payable(_platformWallet),
+            false,
+            false
+        );
+    }
+
     function _preExec(
         ExecOrder memory _order,
         uint256 _fee,
-        bool _outTokenFee,
-        Dex _protocol
+        bool _outTokenFee
     )
         private
         returns (
-            uint256 inAmount,
+            uint256 ethToSend,
+            uint256 sellAmount,
             uint256 minReturn,
             address payable receiver
         )
@@ -522,11 +502,11 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
         if (_outTokenFee) {
             receiver = payable(this);
             minReturn = getMinReturn(_order) + _fee;
-            inAmount = _order.amountPerTrade;
+            sellAmount = _order.amountPerTrade;
         } else {
             receiver = payable(_order.user);
             minReturn = getMinReturn(_order);
-            inAmount = _order.amountPerTrade - _fee;
+            sellAmount = _order.amountPerTrade - _fee;
         }
 
         if (_order.inToken != ETH) {
@@ -536,9 +516,11 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
                 _order.amountPerTrade
             );
             IERC20(_order.inToken).safeIncreaseAllowance(
-                getProtocolAddress(_protocol),
-                inAmount
+                address(smartWalletSwap),
+                sellAmount
             );
+        } else {
+            ethToSend = sellAmount;
         }
     }
 
@@ -570,81 +552,14 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
             _to18Decimals(
                 _inToken,
                 _amountIn,
-                "GelatoDCA:_getKyberRate: newAmountIn revert"
+                "GelatoKrystal:_getKyberRate: newAmountIn revert"
             );
         uint256 newMinReturn =
             _to18Decimals(
                 _outToken,
                 _minReturn,
-                "GelatoDCA:_getKyberRate: newMinReturn revert"
+                "GelatoKrystal:_getKyberRate: newMinReturn revert"
             );
         return wdiv(newMinReturn, newAmountIn);
-    }
-
-    function _addFeeToPlatform(
-        address _wallet,
-        address _token,
-        uint256 _amount
-    ) private {
-        if (_amount > 0) {
-            platformWalletFees[_wallet][_token] =
-                platformWalletFees[_wallet][_token] +
-                _amount;
-        }
-    }
-
-    function getProtocolAddress(Dex _dex) public view returns (address) {
-        if (_dex == Dex.KYBER) return address(kyberProxy);
-        if (_dex == Dex.UNISWAP) return address(uniRouterV2);
-        if (_dex == Dex.SUSHISWAP) return address(sushiRouterV2);
-        revert("GelatoDCA: getProtocolAddress: Dex not found");
-    }
-
-    function getExpectedReturnKyber(
-        IERC20 _src,
-        IERC20 _dest,
-        uint256 _inAmount,
-        uint256 _platformFee,
-        bytes calldata _hint
-    ) external view returns (uint256 outAmount, uint256 expectedRate) {
-        try
-            kyberProxy.getExpectedRateAfterFee(
-                _src,
-                _dest,
-                _inAmount,
-                _platformFee,
-                _hint
-            )
-        returns (uint256 rate) {
-            expectedRate = rate;
-        } catch {
-            expectedRate = 0;
-        }
-        outAmount = calcDestAmount(_src, _dest, _inAmount, expectedRate);
-    }
-
-    function getExpectedReturnUniswap(
-        IUniswapV2Router02 _router,
-        uint256 _inAmount,
-        address[] calldata _tradePath,
-        uint256 _platformFee
-    ) external view returns (uint256 outAmount, uint256 expectedRate) {
-        if (_platformFee >= BPS) return (0, 0);
-        uint256 srcAmountAfterFee = (_inAmount * (BPS - _platformFee)) / BPS;
-        if (srcAmountAfterFee == 0) return (0, 0);
-
-        try _router.getAmountsOut(srcAmountAfterFee, _tradePath) returns (
-            uint256[] memory amounts
-        ) {
-            outAmount = amounts[_tradePath.length - 1];
-        } catch {
-            outAmount = 0;
-        }
-        expectedRate = calcRateFromQty(
-            srcAmountAfterFee,
-            outAmount,
-            getDecimals(IERC20(_tradePath[0])),
-            getDecimals(IERC20(_tradePath[_tradePath.length - 1]))
-        );
     }
 }

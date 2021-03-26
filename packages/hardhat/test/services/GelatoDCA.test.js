@@ -8,7 +8,6 @@ const {
   getGelatoGasPriceV2,
   getTokenFromFaucet,
 } = require("../helpers/gelatoHelper");
-const setupGelatoDiamond = require("../gelatoSetup/setupGelatoDiamond");
 
 // mainnet addresses
 const kyberProxy = network.config.KyberProxy;
@@ -26,7 +25,7 @@ let adminAddress;
 let executor;
 let executorAddress = network.config.GelatoExecutor;
 let gelatoDCA;
-let gelatoDiamond;
+let gelato;
 let oracleAggregator;
 
 describe("Gelato DCA Test", function () {
@@ -43,23 +42,13 @@ describe("Gelato DCA Test", function () {
     });
     executor = await ethers.provider.getSigner(executorAddress)
 
-    gelatoDiamond = await setupGelatoDiamond(admin);
+    gelato = await ethers.getContractAt("IGelato", network.config.Gelato)
 
-    const GelatoDCAFactory = await ethers.getContractFactory(
-      "GelatoDCA",
-      admin
-    );
-
-    gelatoDCA = await GelatoDCAFactory.deploy(
-      kyberProxy,
-      uniswapRouter,
-      sushiswapRouter,
-      gelatoDiamond.address
-    );
+    gelatoDCA = await ethers.getContractAt("GelatoDCA", (await deployments.get("GelatoDCA")).address)
 
     oracleAggregator = await ethers.getContractAt(
       "IOracleAggregator",
-      await gelatoDiamond.getOracleAggregator()
+      await gelato.getOracleAggregator()
     );
   });
 
@@ -149,7 +138,7 @@ describe("Gelato DCA Test", function () {
           gasPrice: gelatoGasPrice,
           gasLimit: 2000000,
         });*/
-      /*const tx = */ await gelatoDiamond
+      /*const tx = */ await gelato
         .connect(executor)
         .exec(gelatoDCA.address, res.payload, daiAddress, {
           gasLimit: 2500000,
@@ -272,7 +261,7 @@ describe("Gelato DCA Test", function () {
       expect(res.ok).to.be.eq("OK");
 
       // Executor executes
-      /*const tx = */ await gelatoDiamond
+      /*const tx = */ await gelato
         .connect(executor)
         .exec(gelatoDCA.address, res.payload, daiAddress, {
           gasLimit: 2500000,
@@ -384,7 +373,7 @@ describe("Gelato DCA Test", function () {
       expect(res.ok).to.be.eq("OK");
 
       // Executor executes
-      /*const tx = */ await gelatoDiamond
+      /*const tx = */ await gelato
         .connect(executor)
         .exec(gelatoDCA.address, res.payload, usdcAddress, {
           gasLimit: 2500000,
@@ -492,7 +481,7 @@ describe("Gelato DCA Test", function () {
       expect(res.ok).to.be.eq("OK");
 
       // Executor executes
-      /*const tx = */ await gelatoDiamond
+      /*const tx = */ await gelato
         .connect(executor)
         .exec(gelatoDCA.address, res.payload, ethAddress, {
           gasLimit: 2500000,
@@ -605,7 +594,7 @@ describe("Gelato DCA Test", function () {
       expect(res.ok).to.be.eq("OK");
 
       // Executor executes
-      /*const tx = */ await gelatoDiamond
+      /*const tx = */ await gelato
         .connect(executor)
         .exec(gelatoDCA.address, res.payload, ethAddress, {
           gasLimit: 2500000,
