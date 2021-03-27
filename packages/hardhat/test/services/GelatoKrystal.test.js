@@ -1,4 +1,4 @@
-const { artifacts, ethers, deployments, network } = require("hardhat");
+const { ethers, deployments, network } = require("hardhat");
 const { utils, BigNumber } = ethers;
 const { expect } = require("chai");
 const { canExec } = require("../helpers/canExecKrystal");
@@ -8,23 +8,15 @@ const {
   getGelatoGasPriceV2,
   getTokenFromFaucet,
 } = require("../helpers/gelatoHelper");
-const setupGelatoDiamond = require("../gelatoSetup/setupGelatoDiamond");
-const SmartWalletSwapImplementation = artifacts.readArtifactSync(
-  "SmartWalletSwapImplementation"
-);
 
 // mainnet addresses
-const kyberProxy = network.config.KyberProxy;
 const uniswapRouter = network.config.UniswapRouter;
 const sushiswapRouter = network.config.SushiswapRouter;
 const ethAddress = network.config.ETH;
-const wethAddress = network.config.WETH;
-const usdtAddress = network.config.USDT;
 const usdcAddress = network.config.USDC;
 const daiAddress = network.config.DAI;
 const gasPriceOracleAddress = network.config.GelatoGasPriceOracle;
 
-let swapImplementation;
 let swapProxy;
 let owner;
 let ownerAddress;
@@ -32,8 +24,9 @@ let gelatoUser;
 let gelatoUserAddress;
 let executor;
 let executorAddress = network.config.GelatoExecutor;
+let krystalPlatformWallet = network.config.KrystalPlatformWallet
 let gelatoKrystal;
-let gelatoDiamond;
+let gelato;
 let oracleAggregator;
 
 describe("Gelato Krystal Test", function () {
@@ -51,61 +44,20 @@ describe("Gelato Krystal Test", function () {
     });
     executor = await ethers.provider.getSigner(executorAddress);
 
-    gelatoDiamond = await setupGelatoDiamond(owner);
-
-    const swapImplementationFactory = await ethers.getContractFactory(
-      "SmartWalletSwapImplementation",
-      owner
-    );
-
-    swapImplementation = await swapImplementationFactory.deploy(ownerAddress);
-
-    const swapProxyFactory = await ethers.getContractFactory(
-      "SmartWalletSwapProxy",
-      owner
-    );
-
-    const swapProxyWithoutFunctions = await swapProxyFactory.deploy(
-      ownerAddress,
-      swapImplementation.address,
-      kyberProxy,
-      [uniswapRouter, sushiswapRouter]
-    );
-
-    // The proxy will not have the correct abis to be able to access the functions
-    // of the implementation contract
-    swapProxy = new ethers.Contract(
-      swapProxyWithoutFunctions.address,
-      SmartWalletSwapImplementation.abi,
-      owner
-    );
+    gelato = await ethers.getContractAt("IGelato", network.config.Gelato)
 
     oracleAggregator = await ethers.getContractAt(
       "IOracleAggregator",
-      await gelatoDiamond.getOracleAggregator()
+      await gelato.getOracleAggregator()
     );
 
-    const GelatoKrystalFactory = await ethers.getContractFactory(
-      "GelatoKrystal",
-      owner
+    swapProxy = await ethers.getContractAt(
+      "SmartWalletSwapImplementation",
+      network.config.SwapProxy
     );
 
-    gelatoKrystal = await GelatoKrystalFactory.deploy(
-      swapProxy.address,
-      uniswapRouter,
-      sushiswapRouter,
-      gelatoDiamond.address
-    );
+    gelatoKrystal = await ethers.getContractAt("GelatoKrystal", (await deployments.get("GelatoKrystal")).address)
 
-    // approve allowance
-    await swapProxy.approveAllowances(
-      [wethAddress, usdtAddress, usdcAddress, daiAddress],
-      [kyberProxy, uniswapRouter, sushiswapRouter],
-      false
-    );
-
-    // update storage data
-    await swapProxy.updateSupportedPlatformWallets([ownerAddress], true);
   });
 
   it("trade t2t (cycle)", async () => {
@@ -131,7 +83,7 @@ describe("Gelato Krystal Test", function () {
       minSlippage: 5000,
       maxSlippage: 5500,
       delay: TWO_MINUTES,
-      platformWallet: ownerAddress,
+      platformWallet: krystalPlatformWallet,
       platformFeeBps: 50,
     };
 
@@ -196,7 +148,7 @@ describe("Gelato Krystal Test", function () {
           gasPrice: gelatoGasPrice,
           gasLimit: 2000000,
         });*/
-      /*const tx = */ await gelatoDiamond
+      /*const tx = */ await gelato
         .connect(executor)
         .exec(gelatoKrystal.address, res.payload, daiAddress, {
           gasLimit: 2500000,
@@ -261,7 +213,7 @@ describe("Gelato Krystal Test", function () {
       minSlippage: 5000,
       maxSlippage: 5500,
       delay: TWO_MINUTES,
-      platformWallet: ownerAddress,
+      platformWallet: krystalPlatformWallet,
       platformFeeBps: 50,
     };
 
@@ -323,7 +275,7 @@ describe("Gelato Krystal Test", function () {
 
       // Executor executes
 
-      /*const tx=  */ await gelatoDiamond
+      /*const tx=  */ await gelato
         .connect(executor)
         .exec(gelatoKrystal.address, res.payload, daiAddress, {
           gasLimit: 2500000,
@@ -381,7 +333,7 @@ describe("Gelato Krystal Test", function () {
       minSlippage: 5000,
       maxSlippage: 5500,
       delay: TWO_MINUTES,
-      platformWallet: ownerAddress,
+      platformWallet: krystalPlatformWallet,
       platformFeeBps: 50,
     };
 
@@ -438,7 +390,7 @@ describe("Gelato Krystal Test", function () {
 
       // Executor executes
 
-      /*const tx = */ await gelatoDiamond
+      /*const tx = */ await gelato
         .connect(executor)
         .exec(gelatoKrystal.address, res.payload, usdcAddress, {
           gasLimit: 2500000,
@@ -493,7 +445,7 @@ describe("Gelato Krystal Test", function () {
       minSlippage: 5000,
       maxSlippage: 5500,
       delay: TWO_MINUTES,
-      platformWallet: ownerAddress,
+      platformWallet: krystalPlatformWallet,
       platformFeeBps: 50,
     };
 
@@ -549,7 +501,7 @@ describe("Gelato Krystal Test", function () {
       expect(res.ok).to.be.eq("OK");
 
       // Executor executes
-      /*const tx = */ await gelatoDiamond
+      /*const tx = */ await gelato
         .connect(executor)
         .exec(gelatoKrystal.address, res.payload, ethAddress, {
           gasLimit: 2500000,
@@ -594,7 +546,7 @@ describe("Gelato Krystal Test", function () {
       minSlippage: 5000,
       maxSlippage: 5500,
       delay: TWO_MINUTES,
-      platformWallet: ownerAddress,
+      platformWallet: krystalPlatformWallet,
       platformFeeBps: 50,
     };
 
@@ -665,7 +617,7 @@ describe("Gelato Krystal Test", function () {
       expect(res.ok).to.be.eq("OK");
 
       // Executor executes
-      /*const tx = */ await gelatoDiamond
+      /*const tx = */ await gelato
         .connect(executor)
         .exec(gelatoKrystal.address, res.payload, ethAddress, {
           gasLimit: 2500000,
