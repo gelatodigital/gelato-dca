@@ -5,11 +5,25 @@ import { useTable, useSortBy } from 'react-table';
 import styled from 'styled-components';
 // Graph QL Query
 import { useQuery } from '@apollo/react-hooks';
-import GET_GELATO_KRYSTAL_TASKS from '../graphql/gelatoKrystal';
-import { sleep, decodeWithoutSignature } from '../utils/helpers';
+import GET_GELATO_DCA_TASK_CYCLES from '../graphql/gelatoDCA';
+import { sleep, getTaskStatus, getTimeAndDate } from '../utils/helpers';
 import { utils } from 'ethers';
 import { addresses } from '@gelato-krystal/contracts';
-const { GELATO_KRYSTAL } = addresses;
+
+const pushEmptyRow = (newRows) => {
+  return newRows.push({
+    id: '',
+    status: '',
+    amountPerTrade: '',
+    received: '',
+    txFee: '',
+    estimatedExecDate: '',
+    actualExecDate: '',
+    lastExecLink:'',
+    submitLink: '',
+    cancel: ''
+  });
+}
 
 const Styles = styled.div`
   padding: 1rem;
@@ -45,7 +59,7 @@ const Styles = styled.div`
 
 const TaskOverview = ({ userAddress, userAccount }) => {
   const { loading, error, data, refetch, fetchMore } = useQuery(
-    GET_GELATO_KRYSTAL_TASKS,
+    GET_GELATO_DCA_TASK_CYCLES,
     {
       variables: {
         skip: 0,
@@ -53,17 +67,20 @@ const TaskOverview = ({ userAddress, userAccount }) => {
       },
     },
   );
-  console.log(data);
+  console.log(loading, data, error);
 
   const [rowData, setRowData] = useState([
     {
       id: '',
       user: '',
+      amountPerTrade: '',
+      received: '',
+      txFee: '',
       status: '',
-      submitDate: '',
-      amount: '',
-      execDate: '',
-      execLink: '',
+      estimatedExecDate: '',
+      actualExecDate: '',
+      lastExecLink: '',
+      submitLink: '',
     },
   ]);
 
@@ -73,26 +90,37 @@ const TaskOverview = ({ userAddress, userAccount }) => {
         Header: '#',
         accessor: 'id', // accessor is the "key" in the data
       },
-
       {
-        Header: 'Task Status',
+        Header: 'Trade Status',
         accessor: 'status',
       },
       {
-        Header: 'Submit Link',
-        accessor: 'submitDate',
+        Header: 'Sell Amount',
+        accessor: 'amountPerTrade',
       },
       {
-        Header: 'Amount to be sold',
-        accessor: 'amount',
+        Header: 'Received',
+        accessor: 'received',
       },
       {
-        Header: 'Exec Date',
-        accessor: 'execDate',
+        Header: 'Tx fee',
+        accessor: 'txFee',
+      },
+      {
+        Header: 'Estimated Exec Date',
+        accessor: 'estimatedExecDate',
+      },
+      {
+        Header: 'Actual Exec Date',
+        accessor: 'actualExecDate',
       },
       {
         Header: 'Exec Link',
-        accessor: 'execLink',
+        accessor: 'lastExecLink',
+      },
+      {
+        Header: 'Submit Link',
+        accessor: 'submitLink',
       },
       {
         Header: 'Cancel Task',
@@ -113,76 +141,89 @@ const TaskOverview = ({ userAddress, userAccount }) => {
   const createRowData = (data) => {
     const newRows = [];
     // Filter all tasks by known Tash Hashes
-    for (let wrapper of data.gelatoKrystalTasks) {
-      const decodedUserAddress = wrapper.user.id;
-      console.log(decodedUserAddress);
-      console.log(userAddress);
+    let id = 0;
+    for (let wrapper of data.gelatoDCATaskCycles) {
+      pushEmptyRow(newRows)
+      const fetchtedUserAddress = wrapper.user.id;
       if (
-        utils.getAddress(userAddress) !== utils.getAddress(decodedUserAddress)
+        utils.getAddress(userAddress) !== utils.getAddress(fetchtedUserAddress)
       ) {
         continue;
       }
-
-      const execUrl = `https://ropsten.etherscan.io/tx/${wrapper.executionHash}`;
-      const submitUrl = `https://ropsten.etherscan.io/tx/${wrapper.submissionHash}`;
-      newRows.push({
-        id: parseInt(wrapper.id),
-        status: wrapper.status,
-        submitDate: (
-          <a target="_blank" href={submitUrl}>
+      for(let i = 0; i < wrapper.numTrades; i++) {
+        id = id + 1;
+        const pastTrades = wrapper.completedTrades
+        if(pastTrades) {
+          pastTrades.sort((a,b)  => {
+            return a.submissionDate - b.submissionDate
+          })
+        }
+        
+        const trade = pastTrades && pastTrades[i] ? pastTrades[i] : i === 0 ? wrapper.currentTrade : undefined
+        const estimatedExecTime = parseInt(wrapper.startDate) + ((1 + i) * parseInt(wrapper.delay))
+        const estimatedExecDate = getTimeAndDate(estimatedExecTime)
+        const actualExecDate = trade && trade.executionDate ? getTimeAndDate(trade.executionDate) : ''
+        // let upcomingTrade;
+        // let execUrl;
+        // let submitUrl;
+        const execUrl = trade  && trade.executionDate ? (
+          <a target="_blank" href={`https://etherscan.io/tx/${trade.executionHash}`}>
             Link
           </a>
-        ),
-        amount: utils.formatUnits(
-            wrapper.amountPerTrade,
-            '18',
-        ),
-        execDate:
-          wrapper.executionDate !== null
-            ? new Date(wrapper.executionDate * 1000)
-                .toLocaleDateString()
-                .toString()
-            : '',
-        execLink:
-          wrapper.status !== 'awaitingExec' ? (
-            <a target="_blank" href={execUrl}>
-              Link
-            </a>
-          ) : (
-            ''
-          ),
-        cancel:
-          wrapper.status === 'awaitingExec' ? (
-            <>
-              <button
-                style={{
-                  borderColor: 'white',
-                  color: 'white',
-                  backgroundColor: '#4299e1',
-                }}
-                onClick={async () => {
-                  console.log('Cancel Feature coming later');
-                  // const cancelTaskData = getCancelTaskData(wrapper.taskReceipt);
-                  // try {
-                  //   await userProxyCast(
-                  //     [CONNECT_GELATO_ADDR],
-                  //     [cancelTaskData],
-                  //     userAccount,
-                  //     0,
-                  //     300000
-                  //   );
-                  // } catch (err) {
-                  //   console.log(err);
-                  // }
-                }}
-              >
-                Cancel
-              </button>
-            </>
-          ) : (
-            ''
-          ),
-      });
+        ) : '';
+        const submitUrl = trade ? (<a target="_blank" href={`https://etherscan.io/tx/${trade.submissionHash}` }>
+        Link
+        </a>
+         ): '';
+        const status = trade ? getTaskStatus(trade.status)  : 'pending'
+        console.log(trade)
+        const received = trade && trade.amountReceived ? `${parseFloat(utils.formatEther(trade.amountReceived)).toFixed(4)} WETH` : ''
+        const txFee = trade && trade.executorFee ? `${parseFloat(utils.formatEther(trade.executorFee)).toFixed(4)} ETH` : ''
+
+        newRows.push({
+          id: id,
+          status: status,
+          amountPerTrade: `${parseFloat(utils.formatEther(wrapper.amountPerTrade)).toFixed(4)} DAI`,
+          received: received,
+          txFee: txFee,
+          estimatedExecDate: estimatedExecDate,
+          actualExecDate: actualExecDate,
+          lastExecLink: execUrl,
+          submitLink: submitUrl,
+          cancel:
+            wrapper.status === 'awaitingExec' ? (
+              <>
+                <button
+                  style={{
+                    borderColor: 'white',
+                    color: 'white',
+                    backgroundColor: '#4299e1',
+                  }}
+                  onClick={async () => {
+                    console.log('Cancel Feature coming later');
+                    // const cancelTaskData = getCancelTaskData(wrapper.taskReceipt);
+                    // try {
+                    //   await userProxyCast(
+                    //     [CONNECT_GELATO_ADDR],
+                    //     [cancelTaskData],
+                    //     userAccount,
+                    //     0,
+                    //     300000
+                    //   );
+                    // } catch (err) {
+                    //   console.log(err);
+                    // }
+                  }}
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              ''
+            ),
+        });
+      }
+      
     }
     return newRows;
   };
@@ -199,7 +240,7 @@ const TaskOverview = ({ userAddress, userAccount }) => {
     return <p>Error fetching Gelato Subgraph, please refresh the page :)</p>;
   return (
     <>
-      <CardWrapper style={{ maxWidth: '100%' }}>
+      <CardWrapper style={{ maxWidth: '100%', marginTop: '80px' }}>
         <Styles>
           <table {...getTableProps()}>
             <thead>
@@ -273,13 +314,16 @@ const TaskOverview = ({ userAddress, userAccount }) => {
             setRowData([
               {
                 id: '',
+                user: '',
+                amountPerTrade: '',
+                received: '',
+                txFee: '',
                 status: '',
-                submitDate: '',
-                limit: '',
-                feeratio: '',
-                execDate: '',
-                execLink: '',
-                cancel: '',
+                estimatedExecDate: '',
+                actualExecDate: '',
+                lastExecLink: '',
+                submitLink: '',
+                
               },
             ]);
             await sleep(1000);

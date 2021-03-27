@@ -8,7 +8,7 @@ const INFURA_ID = process.env.REACT_APP_INFURA_ID;
 // Web3Modal also supports many other wallets.
 // You can see other options at https://github.com/Web3Modal/web3modal
 export const web3Modal = new Web3Modal({
-  network: 'ropsten',
+  network: 'mainnet',
   cacheProvider: true,
   providerOptions: {
     walletconnect: {
