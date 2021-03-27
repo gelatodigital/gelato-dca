@@ -125,3 +125,25 @@ export const getDisplayablePercent = (val) => {
 export const decodeWithoutSignature = (valueTypes, data) => {
   return getABICoder().decode(valueTypes, '0x' + String(data).substring(10));
 };
+
+export const getTaskStatus = (status) => {
+  console.log(status)
+  switch(status) {
+    case("execSuccess"): 
+      return "executed"
+    case("cancelled"): 
+      return "cancelled"
+    case("awaitingExec"):
+      return "pending"
+    default:
+      return "pending"
+  }
+}
+
+export const getTimeAndDate = (estimatedExecTime) => {
+  return `${new Date(estimatedExecTime * 1000)
+    .toTimeString()
+    .toString().substring(0, 8)} ${new Date(estimatedExecTime * 1000)
+      .toLocaleDateString()
+      .toString()}`
+}

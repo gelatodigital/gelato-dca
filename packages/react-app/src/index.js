@@ -8,7 +8,7 @@ import App from './App';
 // You should replace this url with your own and put it into a .env file
 // See all subgraphs: https://thegraph.com/explorer/
 const client = new ApolloClient({
-  uri: `https://api.thegraph.com...` //@HILMARX FILL THIS OUT,
+  uri: `https://api.thegraph.com/subgraphs/name/gelatodigital/gelato-dca`
 });
 
 ReactDOM.render(
