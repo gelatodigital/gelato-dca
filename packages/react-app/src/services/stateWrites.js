@@ -1,7 +1,7 @@
-import { ethers } from 'ethers';
-import { getGelatoKrystal } from './stateReads';
-import {getGasNowGasPrice} from '../utils/helpers'
 import { addresses } from '@gelato-krystal/contracts';
+import { ethers } from 'ethers';
+import { getGasNowGasPrice } from '../utils/helpers';
+import { getGelatoKrystal } from './stateReads';
 const { GELATO_KRYSTAL } = addresses;
 
 export const submitOrder = async (
