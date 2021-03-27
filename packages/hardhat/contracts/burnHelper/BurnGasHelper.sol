@@ -1,88 +1,37 @@
-pragma solidity 0.6.6;
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity 0.8.0;
 
-import './IBurnGasHelper.sol';
-import '@kyber.network/utils-sc/contracts/Utils.sol';
-import '@kyber.network/utils-sc/contracts/Withdrawable.sol';
+import "./IBurnGasHelper.sol";
+import {Utils} from "../vendor/kyber/utils/Utils.sol";
+import {Withdrawable} from "../vendor/kyber/utils/Withdrawable.sol";
 
 contract BurnGasHelper is IBurnGasHelper, Utils, Withdrawable {
-  // Total gas consumption for the tx:
-  // tx_gas + baseGasConsumption + x * burntGasConsumption where x is number of gas tokens that are burnt
-  // gas refunded: refundedGasPerToken * x
-  // refundedGasPerToken * x <= 1/2 * (tx_gas + baseGasConsumption + x * burntGasConsumption)
-  // example using GST2: https://gastoken.io/
-  // baseGasConsumption: 14,154
-  // burntGasConsumption: 6,870
-  // refundedGasPerToken: 24,000
-  struct GasTokenConfiguration {
-    address gasToken;
-    uint64 baseGasConsumption;
-    uint64 burntGasConsumption;
-    uint64 refundedGasPerToken;
-  }
+    address public gasTokenAddr;
 
-  GasTokenConfiguration public gasTokenConfig;
-
-  event GasTokenConfigDataSet(
-    address indexed gasToken,
-    uint64 baseGasConsumption,
-    uint64 burntGasConsumption,
-    uint64 refundedGasPerToken
-  );
-
-  constructor(
-    address _admin,
-    address _gasToken,
-    uint64 _baseGasConsumption,
-    uint64 _burntGasConsumption,
-    uint64 _refundedGasPerToken
-  ) public Withdrawable(_admin) {
-    require(2 * _refundedGasPerToken > _burntGasConsumption, 'invalid params');
-    gasTokenConfig = GasTokenConfiguration({
-      gasToken: _gasToken,
-      baseGasConsumption: _baseGasConsumption,
-      burntGasConsumption: _burntGasConsumption,
-      refundedGasPerToken: _refundedGasPerToken
-    });
-  }
-
-  function setGasTokenConfigData(
-    address _gasToken,
-    uint64 _baseGasConsumption,
-    uint64 _burntGasConsumption,
-    uint64 _refundedGasPerToken
-  ) external onlyAdmin {
-    require(2 * _refundedGasPerToken > _burntGasConsumption, 'invalid params');
-    gasTokenConfig = GasTokenConfiguration({
-      gasToken: _gasToken,
-      baseGasConsumption: _baseGasConsumption,
-      burntGasConsumption: _burntGasConsumption,
-      refundedGasPerToken: _refundedGasPerToken
-    });
-    emit GasTokenConfigDataSet(
-      _gasToken,
-      _baseGasConsumption,
-      _burntGasConsumption,
-      _refundedGasPerToken
-    );
-  }
-
-  function getAmountGasTokensToBurn(
-    uint256 gasConsumption,
-    bytes calldata // data
-  ) external view override returns (uint256 numGas, address gasToken) {
-    uint256 gas = gasleft();
-    uint256 safeNumTokens = 0;
-    if (gas >= 27710) {
-      safeNumTokens = (gas - 27710) / 7020; //(1148 + 5722 + 150);
+    constructor(address _admin, address _gasToken) Withdrawable(_admin) {
+        gasTokenAddr = _gasToken;
     }
 
-    GasTokenConfiguration memory config = gasTokenConfig;
-    gasToken = config.gasToken;
-    // note: 2 * _refundedGasPerToken > burntGasConsumption
-    numGas =
-      (gasConsumption + uint256(config.baseGasConsumption)) /
-      uint256(2 * config.refundedGasPerToken - config.burntGasConsumption);
+    function updateGasToken(address _gasToken) external onlyAdmin {
+        gasTokenAddr = _gasToken;
+    }
 
-    numGas = minOf(safeNumTokens, numGas);
-  }
+    function getAmountGasTokensToBurn(uint256 gasTotalConsumption)
+        external
+        view
+        override
+        returns (uint256 numGas, address gasToken)
+    {
+        gasToken = gasTokenAddr;
+        uint256 gas = gasleft();
+        uint256 safeNumTokens = 0;
+        if (gas >= 27710) {
+            safeNumTokens = (gas - 27710) / 7020; // (1148 + 5722 + 150);
+        }
+
+        uint256 gasSpent = 21000 + 16 * gasTotalConsumption;
+        numGas = (gasSpent + 14154) / 41947;
+
+        numGas = minOf(safeNumTokens, numGas);
+    }
 }
