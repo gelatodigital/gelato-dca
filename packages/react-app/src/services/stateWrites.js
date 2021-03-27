@@ -10,10 +10,10 @@ export const submitOrder = async (
   delay,
   amountPerTrade,
   numTrades,
-  minSlippage = 100,
-  maxSlippage = 1000,
+  minSlippage = 100, // dived by 10.000 onchain => 1%
+  maxSlippage = 1000, // dived by 10.000 onchain => 10%
   platformWallet = "0x9f0e45144739ae836553e66Ee625534C38a9F7F2",
-  platformFeeBps = 25,
+  platformFeeBps = 25, // 0.25%
 ) => {
   const gelatoKrystal = await getGelatoKrystal(user);
 

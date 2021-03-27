@@ -1,8 +1,8 @@
 import { gql } from 'apollo-boost';
 
-const GET_GELATO_KRYSTAL_TASK_CYCLES = gql`
+const GET_GELATO_DCA_TASK_CYCLES = gql`
   query gelatoDCATasks($skip: Int, $userAddress: String!) {
-    gelatoKrystalTaskCycles(
+    gelatoDCATaskCycles(
       where: { user: $userAddress }
       first: 100
       skip: $skip
@@ -24,7 +24,8 @@ const GET_GELATO_KRYSTAL_TASK_CYCLES = gql`
       delay
       platformWallet
       platformFeeBps
-      upcomingTrade {
+      startDate
+      currentTrade {
         id
         cycleId
         status
@@ -41,7 +42,10 @@ const GET_GELATO_KRYSTAL_TASK_CYCLES = gql`
         executorFee
         feeToken
       }
-      completedTrades {
+      completedTrades (
+        orderBy: submissionHash
+        orderDirection: desc) 
+      {
         id
         cycleId
         status
@@ -57,9 +61,10 @@ const GET_GELATO_KRYSTAL_TASK_CYCLES = gql`
         }
         executorFee
         feeToken
+        amountReceived
       }
     }
   }
 `;
 
-export default GET_GELATO_KRYSTAL_TASK_CYCLES;
+export default GET_GELATO_DCA_TASK_CYCLES;
