@@ -64,3 +64,23 @@ export const approveToken = async (user, inToken, totalAmount) => {
     console.log(err);
   }
 };
+
+export const cancelCycle = async (provider, order, id) => {
+  const gelatoKrystal = await getGelatoKrystal(provider);
+
+  const options = {
+    gasPrice: ethers.utils.parseUnits('50', 'gwei'),
+    gasLimit: 100000,
+  };
+  try {
+    const cancelTx = await gelatoKrystal.cancel(
+      order,
+      id,
+      options,
+    );
+    await cancelTx.wait();
+  } catch (err) {
+    console.log(err);
+    console.log('Cancel DCA failed');
+  }
+}

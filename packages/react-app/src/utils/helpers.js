@@ -140,6 +140,11 @@ export const getTaskStatus = (status) => {
   }
 }
 
+export const getPendingApprovalAmount = async (cycles) => {
+  console.log(`@DEV TO BE IMPLEMENTED`)
+
+}
+
 export const getTimeAndDate = (estimatedExecTime) => {
   return `${new Date(estimatedExecTime * 1000)
     .toTimeString()

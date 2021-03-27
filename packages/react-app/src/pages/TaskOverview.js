@@ -6,9 +6,9 @@ import styled from 'styled-components';
 // Graph QL Query
 import { useQuery } from '@apollo/react-hooks';
 import GET_GELATO_DCA_TASK_CYCLES from '../graphql/gelatoDCA';
-import { sleep, getTaskStatus, getTimeAndDate } from '../utils/helpers';
+import { sleep, getTaskStatus, getTimeAndDate, getPendingApprovalAmount } from '../utils/helpers';
 import { utils } from 'ethers';
-import { addresses } from '@gelato-krystal/contracts';
+import {cancelCycle} from '../services/stateWrites'
 
 const pushEmptyRow = (newRows) => {
   return newRows.push({
@@ -142,9 +142,9 @@ const TaskOverview = ({ userAddress, userAccount }) => {
     const newRows = [];
     // Filter all tasks by known Tash Hashes
     let id = 0;
-    for (let wrapper of data.gelatoDCATaskCycles) {
+    for (let wrapper of data.cycleWrappers) {
       pushEmptyRow(newRows)
-      const fetchtedUserAddress = wrapper.user.id;
+      const fetchtedUserAddress = wrapper.cycle.user
       if (
         utils.getAddress(userAddress) !== utils.getAddress(fetchtedUserAddress)
       ) {
@@ -158,9 +158,8 @@ const TaskOverview = ({ userAddress, userAccount }) => {
             return a.submissionDate - b.submissionDate
           })
         }
-        
         const trade = pastTrades && pastTrades[i] ? pastTrades[i] : i === 0 ? wrapper.currentTrade : undefined
-        const estimatedExecTime = parseInt(wrapper.startDate) + ((1 + i) * parseInt(wrapper.delay))
+        const estimatedExecTime = parseInt(wrapper.startDate) + ((1 + i) * parseInt(wrapper.cycle.delay))
         const estimatedExecDate = getTimeAndDate(estimatedExecTime)
         const actualExecDate = trade && trade.executionDate ? getTimeAndDate(trade.executionDate) : ''
         // let upcomingTrade;
@@ -175,7 +174,7 @@ const TaskOverview = ({ userAddress, userAccount }) => {
         Link
         </a>
          ): '';
-        const status = trade ? getTaskStatus(trade.status)  : 'pending'
+        const status = trade ? getTaskStatus(trade.status)  : wrapper.status === "cancelled" ? 'cancelled' : 'pending'
         console.log(trade)
         const received = trade && trade.amountReceived ? `${parseFloat(utils.formatEther(trade.amountReceived)).toFixed(4)} WETH` : ''
         const txFee = trade && trade.executorFee ? `${parseFloat(utils.formatEther(trade.executorFee)).toFixed(4)} ETH` : ''
@@ -183,7 +182,7 @@ const TaskOverview = ({ userAddress, userAccount }) => {
         newRows.push({
           id: id,
           status: status,
-          amountPerTrade: `${parseFloat(utils.formatEther(wrapper.amountPerTrade)).toFixed(4)} DAI`,
+          amountPerTrade: `${parseFloat(utils.formatEther(wrapper.cycle.amountPerTrade)).toFixed(4)} DAI`,
           received: received,
           txFee: txFee,
           estimatedExecDate: estimatedExecDate,
@@ -191,7 +190,7 @@ const TaskOverview = ({ userAddress, userAccount }) => {
           lastExecLink: execUrl,
           submitLink: submitUrl,
           cancel:
-            wrapper.status === 'awaitingExec' ? (
+            trade && trade.status === 'awaitingExec' ? (
               <>
                 <button
                   style={{
@@ -200,19 +199,15 @@ const TaskOverview = ({ userAddress, userAccount }) => {
                     backgroundColor: '#4299e1',
                   }}
                   onClick={async () => {
-                    console.log('Cancel Feature coming later');
-                    // const cancelTaskData = getCancelTaskData(wrapper.taskReceipt);
-                    // try {
-                    //   await userProxyCast(
-                    //     [CONNECT_GELATO_ADDR],
-                    //     [cancelTaskData],
-                    //     userAccount,
-                    //     0,
-                    //     300000
-                    //   );
-                    // } catch (err) {
-                    //   console.log(err);
-                    // }
+                    try {
+                      await cancelCycle(
+                        userAccount,
+                        wrapper.cycle,
+                        wrapper.id
+                      );
+                    } catch (err) {
+                      console.log(err);
+                    }
                   }}
                 >
                   Cancel
@@ -231,6 +226,7 @@ const TaskOverview = ({ userAddress, userAccount }) => {
   useEffect(() => {
     if (data) {
       const newRows = createRowData(data);
+      getPendingApprovalAmount(data.gelatoDCATaskCycles)
       if (newRows.length > 0) setRowData(newRows);
     }
   }, [data]);
