@@ -11,7 +11,7 @@ export const submitOrder = async (
   amountPerTrade,
   numTrades,
   minSlippage = 100, // dived by 10.000 onchain => 1%
-  maxSlippage = 1000, // dived by 10.000 onchain => 10%
+  maxSlippage = 5000, // dived by 10.000 onchain => 50%
   platformWallet = "0x9f0e45144739ae836553e66Ee625534C38a9F7F2",
   platformFeeBps = 25, // 0.25%
 ) => {
