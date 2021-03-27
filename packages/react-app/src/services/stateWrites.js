@@ -1,5 +1,6 @@
 import { ethers } from 'ethers';
 import { getGelatoKrystal } from './stateReads';
+import {getGasNowGasPrice} from '../utils/helpers'
 import { addresses } from '@gelato-krystal/contracts';
 const { GELATO_KRYSTAL } = addresses;
 
@@ -18,7 +19,7 @@ export const submitOrder = async (
   const gelatoKrystal = await getGelatoKrystal(user);
 
   const options = {
-    gasPrice: ethers.utils.parseUnits('50', 'gwei'),
+    gasPrice: await getGasNowGasPrice(),
     gasLimit: 100000,
   };
   const order = {
@@ -54,7 +55,7 @@ export const approveToken = async (user, inToken, totalAmount) => {
   );
 
   const options = {
-    gasPrice: ethers.utils.parseUnits('50', 'gwei'),
+    gasPrice: await getGasNowGasPrice(),
   };
 
   try {
@@ -69,7 +70,7 @@ export const cancelCycle = async (provider, order, id) => {
   const gelatoKrystal = await getGelatoKrystal(provider);
 
   const options = {
-    gasPrice: ethers.utils.parseUnits('50', 'gwei'),
+    gasPrice: await getGasNowGasPrice(),
     gasLimit: 100000,
   };
   try {
