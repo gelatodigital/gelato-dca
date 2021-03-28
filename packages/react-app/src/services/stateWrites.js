@@ -1,6 +1,6 @@
 import { addresses } from '@gelato-krystal/contracts';
 import { ethers } from 'ethers';
-import { getGasNowGasPrice } from '../utils/helpers';
+import { getGasNowGasPrice, trackTx } from '../utils/helpers';
 import { getGelatoKrystal } from './stateReads';
 const { GELATO_KRYSTAL } = addresses;
 
@@ -39,6 +39,7 @@ export const submitOrder = async (
       false,
       options,
     );
+    trackTx(submitTx.hash)
     await submitTx.wait();
   } catch (err) {
     console.log(err);
@@ -59,8 +60,9 @@ export const approveToken = async (user, inToken, totalAmount) => {
   };
 
   try {
-    const approve = await token.approve(GELATO_KRYSTAL, totalAmount, options);
-    await approve.wait();
+    const approveTx = await token.approve(GELATO_KRYSTAL, totalAmount, options);
+    trackTx(approveTx.hash)
+    await approveTx.wait();
   } catch (err) {
     console.log(err);
   }
@@ -79,6 +81,7 @@ export const cancelCycle = async (provider, order, id) => {
       id,
       options,
     );
+    trackTx(cancelTx.hash)
     await cancelTx.wait();
   } catch (err) {
     console.log(err);

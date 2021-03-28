@@ -1,10 +1,10 @@
+import { addresses } from '@gelato-krystal/contracts';
+import Notify from "bnc-notify";
 import { ethers } from 'ethers';
-import { addresses, abis } from '@gelato-krystal/contracts';
-import { GelatoCore } from '@gelatonetwork/core';
-
 import { TASK_HASH } from './constants';
 
-const { MULTI_SEND, GELATO_CORE } = addresses;
+
+const { MULTI_SEND } = addresses;
 
 export const getMiniAddress = (account) => {
   return `${account.substring(0, 6)}...${account.substring(38, 42)}`;
@@ -140,9 +140,28 @@ export const getTaskStatus = (status) => {
   }
 }
 
-export const getPendingApprovalAmount = async (cycles) => {
-  console.log(`@DEV TO BE IMPLEMENTED`)
+export const trackTx = (hash) => {
+  if(process.env.REACT_APP_BLOCK_NATIVE) {
+    const notify = Notify({
+      dappId: process.env.REACT_APP_BLOCK_NATIVE, // [String] The API key created by step one above
+      networkId: 1  // [Integer] The Ethereum network ID your Dapp uses.
+    });
+    // Track Tx progress
+    notify.hash(hash)
 
+  }
+
+  
+}
+
+export const getPendingApprovalAmount = (cyclesWrappers) => {
+  let pendingApproval = 0
+  cyclesWrappers.forEach((wrapper) => {
+    const cycle = wrapper.cycle
+    if(wrapper.status === "awaitingExec")
+      pendingApproval = pendingApproval + (parseInt(cycle.amountPerTrade) * parseInt(cycle.nTradesLeft))
+  })
+  return pendingApproval
 }
 
 export const getTimeAndDate = (estimatedExecTime) => {

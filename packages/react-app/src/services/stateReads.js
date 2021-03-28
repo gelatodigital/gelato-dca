@@ -42,6 +42,19 @@ export const getGelatoGasPrice = async (user) => {
   return await gelatoGasPriceOracle.latestAnswer();
 };
 
+export const getTokenAllowance = async (user, token) => {
+  const signer = await user.getSigner();
+  const userAddr = await signer.getAddress();
+
+  const tokenContract = new ethers.Contract(
+    token,
+    ['function allowance(address,address) view returns (uint256)'],
+    signer,
+  );
+  const userBalance = await tokenContract.allowance(userAddr, GELATO_KRYSTAL);
+  return userBalance;
+};
+
 export const getTokenBalance = async (user, token) => {
   const signer = await user.getSigner();
   const userAddr = await signer.getAddress();

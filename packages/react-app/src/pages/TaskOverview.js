@@ -1,14 +1,14 @@
-import React, { useMemo, useState, useEffect } from 'react';
-import { CardWrapper, Button } from '../components';
-import { useTable, useSortBy } from 'react-table';
-// Styled components
-import styled from 'styled-components';
 // Graph QL Query
 import { useQuery } from '@apollo/react-hooks';
-import GET_GELATO_DCA_TASK_CYCLES from '../graphql/gelatoDCA';
-import { sleep, getTaskStatus, getTimeAndDate, getPendingApprovalAmount } from '../utils/helpers';
 import { utils } from 'ethers';
-import {cancelCycle} from '../services/stateWrites'
+import React, { useEffect, useMemo, useState } from 'react';
+import { usePagination, useSortBy, useTable } from 'react-table';
+// Styled components
+import styled from 'styled-components';
+import { Button, CardWrapper } from '../components';
+import GET_GELATO_DCA_TASK_CYCLES from '../graphql/gelatoDCA';
+import { cancelCycle } from '../services/stateWrites';
+import { getTaskStatus, getTimeAndDate, sleep } from '../utils/helpers';
 
 const pushEmptyRow = (newRows) => {
   return newRows.push({
@@ -67,7 +67,6 @@ const TaskOverview = ({ userAddress, userAccount }) => {
       },
     },
   );
-  console.log(loading, data, error);
 
   const [rowData, setRowData] = useState([
     {
@@ -134,9 +133,21 @@ const TaskOverview = ({ userAddress, userAccount }) => {
     getTableProps,
     getTableBodyProps,
     headerGroups,
-    rows,
     prepareRow,
-  } = useTable({ columns, data: rowData }, useSortBy);
+    page, // Instead of using 'rows', we'll use page,
+    // which has only the rows for the active page
+
+    // The rest of these things are super handy, too ;)
+    canPreviousPage,
+    canNextPage,
+    pageOptions,
+    pageCount,
+    gotoPage,
+    nextPage,
+    previousPage,
+    setPageSize,
+    state: { pageIndex, pageSize }
+  } = useTable({ columns, data: rowData }, useSortBy, usePagination);
 
   const createRowData = (data) => {
     const newRows = [];
@@ -177,7 +188,7 @@ const TaskOverview = ({ userAddress, userAccount }) => {
         const status = trade ? getTaskStatus(trade.status)  : wrapper.status === "cancelled" ? 'cancelled' : 'pending'
         console.log(trade)
         const received = trade && trade.amountReceived ? `${parseFloat(utils.formatEther(trade.amountReceived)).toFixed(4)} WETH` : ''
-        const txFee = trade && trade.executorFee ? `${parseFloat(utils.formatEther(trade.executorFee)).toFixed(4)} ETH` : ''
+        const txFee = trade && trade.executorFee ? `${parseFloat(utils.formatEther(trade.executorFee)).toFixed(4)} DAI` : ''
 
         newRows.push({
           id: id,
@@ -226,7 +237,6 @@ const TaskOverview = ({ userAddress, userAccount }) => {
   useEffect(() => {
     if (data) {
       const newRows = createRowData(data);
-      getPendingApprovalAmount(data.gelatoDCATaskCycles)
       if (newRows.length > 0) setRowData(newRows);
     }
   }, [data]);
@@ -236,7 +246,7 @@ const TaskOverview = ({ userAddress, userAccount }) => {
     return <p>Error fetching Gelato Subgraph, please refresh the page :)</p>;
   return (
     <>
-      <CardWrapper style={{ maxWidth: '100%', marginTop: '80px' }}>
+      <CardWrapper style={{ maxWidth: '100%', marginTop: '20vh' }}>
         <Styles>
           <table {...getTableProps()}>
             <thead>
@@ -276,7 +286,7 @@ const TaskOverview = ({ userAddress, userAccount }) => {
             <tbody {...getTableBodyProps()}>
               {
                 // Loop over the table rows
-                rows.map((row) => {
+                page.map((row) => {
                   // Prepare the row for display
                   prepareRow(row);
                   return (
@@ -302,6 +312,50 @@ const TaskOverview = ({ userAddress, userAccount }) => {
               }
             </tbody>
           </table>
+          <div className="pagination">
+            <button onClick={() => gotoPage(0)} disabled={!canPreviousPage}>
+              {'<<'}
+            </button>{' '}
+            <button onClick={() => previousPage()} disabled={!canPreviousPage}>
+              {'<'}
+            </button>{' '}
+            <button onClick={() => nextPage()} disabled={!canNextPage}>
+              {'>'}
+            </button>{' '}
+            <button onClick={() => gotoPage(pageCount - 1)} disabled={!canNextPage}>
+              {'>>'}
+            </button>{' '}
+            <span>
+              Page{' '}
+              <strong>
+                {pageIndex + 1} of {pageOptions.length}
+              </strong>{' '}
+            </span>
+            <span>
+              | Go to page:{' '}
+              <input
+                type="number"
+                defaultValue={pageIndex + 1}
+                onChange={e => {
+                  const page = e.target.value ? Number(e.target.value) - 1 : 0
+                  gotoPage(page)
+                }}
+                style={{ width: '100px' }}
+              />
+            </span>{' '}
+            <select
+              value={pageSize}
+              onChange={e => {
+                setPageSize(Number(e.target.value))
+              }}
+            >
+              {[10, 20, 30, 40, 50].map(pageSize => (
+                <option key={pageSize} value={pageSize}>
+                  Show {pageSize}
+                </option>
+              ))}
+            </select>
+          </div>
         </Styles>
         <Button
           background="#4299e1"
