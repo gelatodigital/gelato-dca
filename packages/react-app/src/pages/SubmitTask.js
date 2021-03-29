@@ -119,8 +119,12 @@ const SubmitTask = ({ userAccount, userAddress }) => {
       <CardWrapper>
         <ViewCard>
           <label style={{ margin: '10px' }}>
-            Total Amount of DAI to sell for WETH
+            Total Amount of DAI to sell for WETH 
           </label>
+          <label style={{ marginBottom: '8px', fontSize: '10px' }}>
+          (min. 300 DAI, more is better)
+          </label>
+
 
           <input
             style={{ maxWidth: '80%' }}

@@ -246,7 +246,7 @@ const TaskOverview = ({ userAddress, userAccount }) => {
     return <p>Error fetching Gelato Subgraph, please refresh the page :)</p>;
   return (
     <>
-      <CardWrapper style={{ maxWidth: '100%', marginTop: '20vh' }}>
+      <CardWrapper style={{ maxWidth: '100%', marginTop: '8vh' }}>
         <Styles>
           <table {...getTableProps()}>
             <thead>
