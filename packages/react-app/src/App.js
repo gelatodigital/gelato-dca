@@ -1,22 +1,19 @@
 /* eslint-disable */
-import { Web3Provider } from '@ethersproject/providers';
-import React, { useCallback, useEffect, useState } from 'react';
+import { Web3Provider } from "@ethersproject/providers";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   BrowserRouter as Router,
-
-
   Link,
-  Redirect, Route, Switch
-} from 'react-router-dom';
-import { Body, Button, CardWrapper, Header, Page } from './components';
-import GelatoLogo from './components/Logo';
-import SubmitTask from './pages/SubmitTask';
-import TaskOverview from './pages/TaskOverview';
-import User from './pages/User';
-import { logoutOfWeb3Modal, web3Modal } from './utils/web3Modal';
-
-
-
+  Redirect,
+  Route,
+  Switch,
+} from "react-router-dom";
+import { Body, Button, CardWrapper, Header, Page } from "./components";
+import GelatoLogo from "./components/Logo";
+import SubmitTask from "./pages/SubmitTask";
+import TaskOverview from "./pages/TaskOverview";
+import User from "./pages/User";
+import { logoutOfWeb3Modal, web3Modal } from "./utils/web3Modal";
 
 function WalletButton({ userAccount, loadWeb3Modal }) {
   return (
@@ -29,7 +26,7 @@ function WalletButton({ userAccount, loadWeb3Modal }) {
         }
       }}
     >
-      {!userAccount ? 'Connect Wallet' : 'Disconnect Wallet'}
+      {!userAccount ? "Connect Wallet" : "Disconnect Wallet"}
     </Button>
   );
 }
@@ -74,9 +71,9 @@ function App() {
               <Page>
                 <Link
                   style={{
-                    color: '#483D8B',
-                    textDecoration: 'none',
-                    fontWeight: 'bold',
+                    color: "#483D8B",
+                    textDecoration: "none",
+                    fontWeight: "bold",
                   }}
                   to="/"
                 >
@@ -86,9 +83,9 @@ function App() {
               <Page>
                 <Link
                   style={{
-                    color: '#483D8B',
-                    textDecoration: 'none',
-                    fontWeight: 'bold',
+                    color: "#483D8B",
+                    textDecoration: "none",
+                    fontWeight: "bold",
                   }}
                   to="/submit-task"
                 >
@@ -98,9 +95,9 @@ function App() {
               <Page>
                 <Link
                   style={{
-                    color: '#483D8B',
-                    textDecoration: 'none',
-                    fontWeight: 'bold',
+                    color: "#483D8B",
+                    textDecoration: "none",
+                    fontWeight: "bold",
                   }}
                   to="/task-overview"
                 >
@@ -119,7 +116,7 @@ function App() {
             {!userAccount && (
               <Route path="/">
                 <CardWrapper>
-                  <h3 style={{ color: '#4299e1' }}>Please login</h3>
+                  <h3 style={{ color: "#4299e1" }}>Please login</h3>
                 </CardWrapper>
               </Route>
             )}
@@ -127,7 +124,10 @@ function App() {
               <>
                 <Route path="/submit-task">
                   {userAccount && userAddress && (
-                    <SubmitTask userAccount={userAccount} userAddress={userAddress}></SubmitTask>
+                    <SubmitTask
+                      userAccount={userAccount}
+                      userAddress={userAddress}
+                    ></SubmitTask>
                   )}
                 </Route>
                 <Route path="/task-overview">

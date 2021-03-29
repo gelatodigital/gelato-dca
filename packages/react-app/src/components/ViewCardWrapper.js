@@ -1,5 +1,5 @@
-import React from 'react';
-import { ViewCard } from '../components';
+import React from "react";
+import { ViewCard } from "../components";
 
 const ViewCardWrapper = ({ title, state }) => {
   return (

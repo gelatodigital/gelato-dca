@@ -1,6 +1,6 @@
-import { ethers } from 'ethers';
-import { getMiniAddress } from '../utils/helpers';
-import { addresses, abis } from '@gelato-krystal/contracts';
+import { ethers } from "ethers";
+import { getMiniAddress } from "../utils/helpers";
+import { addresses, abis } from "@gelato-krystal/contracts";
 
 const { GELATO_GAS_PRICE_ORACLE, GELATO_KRYSTAL } = addresses;
 const { GelatoKrystalAbi } = abis;
@@ -21,11 +21,11 @@ export const getGelatoKrystal = async (user) => {
     gelatoKrystalContract = new ethers.Contract(
       GELATO_KRYSTAL,
       GelatoKrystalAbi,
-      signer,
+      signer
     );
   } catch (err) {
     console.log(err);
-    throw Error('Cannot instantiate GelatoKrystal');
+    throw Error("Cannot instantiate GelatoKrystal");
   }
   return gelatoKrystalContract;
 };
@@ -34,8 +34,8 @@ export const getGelatoGasPrice = async (user) => {
   const signer = await user.getSigner();
   const gelatoGasPriceOracle = new ethers.Contract(
     GELATO_GAS_PRICE_ORACLE,
-    ['function latestAnswer() view returns (int256)'],
-    signer,
+    ["function latestAnswer() view returns (int256)"],
+    signer
   );
 
   // latestAnswer is used by GelatoGasPriceOracle as well as the Chainlink Oracle
@@ -48,8 +48,8 @@ export const getTokenAllowance = async (user, token) => {
 
   const tokenContract = new ethers.Contract(
     token,
-    ['function allowance(address,address) view returns (uint256)'],
-    signer,
+    ["function allowance(address,address) view returns (uint256)"],
+    signer
   );
   const userBalance = await tokenContract.allowance(userAddr, GELATO_KRYSTAL);
   return userBalance;
@@ -61,8 +61,8 @@ export const getTokenBalance = async (user, token) => {
 
   const tokenContract = new ethers.Contract(
     token,
-    ['function balanceOf(address) view returns (uint256)'],
-    signer,
+    ["function balanceOf(address) view returns (uint256)"],
+    signer
   );
   const userBalance = await tokenContract.balanceOf(userAddr);
   return userBalance;
@@ -72,12 +72,12 @@ export const getTokenBalanceString = async (
   userAccount,
   token,
   tokenSymbol,
-  decimals,
+  decimals
 ) => {
   const userBalance = await getTokenBalance(userAccount, token);
   const userBalanceHumanReadable = ethers.utils.formatUnits(
     userBalance,
-    decimals,
+    decimals
   );
   return `${parseFloat(userBalanceHumanReadable).toFixed(8)} ${tokenSymbol}`;
 };
