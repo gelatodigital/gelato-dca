@@ -1,6 +1,9 @@
 {
   "name": "@gelato-krystal/monorepo",
   "version": "1.0.0",
+  
+  "license": "UNLICENSED",
+  
   "keywords": [
     "ethereum",
     "react",
@@ -22,5 +25,4 @@
       "packages/*"
     ]
   }
-  
 }
