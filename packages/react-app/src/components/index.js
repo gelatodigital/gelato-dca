@@ -1,4 +1,4 @@
-import styled from 'styled-components';
+import styled from "styled-components";
 
 export const Header = styled.header`
   background-color: #c8dcec;
@@ -11,7 +11,7 @@ export const Header = styled.header`
   .gelato-logo {
     margin-left: 20px;
     margin-right: auto;
-    text-decoration: 'none';
+    text-decoration: "none";
     color: white;
     cursor: pointer;
     display: flex;
@@ -87,7 +87,7 @@ export const Button = styled.button`
   margin: 0px 20px;
   padding: 12px 24px;
 
-  ${(props) => props.hidden && 'hidden'} :focus {
+  ${(props) => props.hidden && "hidden"} :focus {
     border: none;
     outline: none;
   }

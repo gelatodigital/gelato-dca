@@ -1,4 +1,4 @@
-import { gql } from 'apollo-boost';
+import { gql } from "apollo-boost";
 
 const GET_TASK_RECEIPT_WRAPPERS = gql`
   query taskReceiptWrapper($skip: Int, $proxyAddress: String!) {

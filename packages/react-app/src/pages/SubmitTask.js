@@ -1,26 +1,22 @@
-import { useQuery } from '@apollo/react-hooks';
-import { addresses } from '@gelato-krystal/contracts';
-import { BigNumber, ethers } from 'ethers';
-import React, { useEffect, useState } from 'react';
-import { Button, CardWrapper, ViewCard } from '../components';
-import GET_GELATO_DCA_TASK_CYCLES from '../graphql/gelatoDCA';
-import { getTokenAllowance } from '../services/stateReads';
-import { approveToken, submitOrder } from '../services/stateWrites';
-import { getPendingApprovalAmount } from '../utils/helpers';
+import { useQuery } from "@apollo/react-hooks";
+import { addresses } from "@gelato-krystal/contracts";
+import { BigNumber, ethers } from "ethers";
+import React, { useEffect, useState } from "react";
+import { Button, CardWrapper, ViewCard } from "../components";
+import GET_GELATO_DCA_TASK_CYCLES from "../graphql/gelatoDCA";
+import { getTokenAllowance } from "../services/stateReads";
+import { approveToken, submitOrder } from "../services/stateWrites";
+import { getPendingApprovalAmount } from "../utils/helpers";
 const { DAI, WETH } = addresses;
-
 
 const SubmitTask = ({ userAccount, userAddress }) => {
   // get data from subgraph
-  const { loading, data,  } = useQuery(
-    GET_GELATO_DCA_TASK_CYCLES,
-    {
-      variables: {
-        skip: 0,
-        userAddress: userAddress.toLowerCase(),
-      },
+  const { loading, data } = useQuery(GET_GELATO_DCA_TASK_CYCLES, {
+    variables: {
+      skip: 0,
+      userAddress: userAddress.toLowerCase(),
     },
-  );
+  });
 
   // internal state
   const [pendingApproval, setPendingApproval] = useState(ethers.constants.Zero);
@@ -32,9 +28,8 @@ const SubmitTask = ({ userAccount, userAddress }) => {
 
   const handleTotalAmountChange = async (event) => {
     const newValue = event.target.value;
-    if (newValue=== '') setTotalAmount(0);
-    else
-      setTotalAmount(newValue);
+    if (newValue === "") setTotalAmount(0);
+    else setTotalAmount(newValue);
   };
 
   const handleIntervalSecondsChange = async (event) => {
@@ -49,16 +44,16 @@ const SubmitTask = ({ userAccount, userAddress }) => {
 
   const submit = async () => {
     if (totalAmount === 0) {
-      console.log('Insufficient total amount');
+      console.log("Insufficient total amount");
       return;
     }
 
     if (intervalSeconds === 0) {
-      console.log('0 Interval seconds not allowed');
+      console.log("0 Interval seconds not allowed");
       return;
     }
     if (parseInt(tradeNum) > 10) {
-      console.log('Max Trade Number is 10');
+      console.log("Max Trade Number is 10");
       return;
     }
 
@@ -67,67 +62,68 @@ const SubmitTask = ({ userAccount, userAddress }) => {
       DAI,
       WETH,
       intervalSeconds,
-      ethers.utils.parseUnits(totalAmount, '18').div(BigNumber.from(tradeNum)),
-      tradeNum,
+      ethers.utils.parseUnits(totalAmount, "18").div(BigNumber.from(tradeNum)),
+      tradeNum
     );
   };
 
   const approve = async () => {
     if (totalAmount === 0) {
-      console.log('Insufficient total amount');
+      console.log("Insufficient total amount");
       return;
     }
 
     await approveToken(
       userAccount,
       DAI,
-      ethers.utils.parseUnits(totalAmount, '18'),
+      ethers.utils.parseUnits(totalAmount, "18")
     );
   };
 
-  const checkIfApprovalRequired = async() => {
-    const currentApproval = await getTokenAllowance(userAccount, DAI)
-    const totalAmountBn = ethers.utils.parseUnits(totalAmount.toString(), '18')
-    
+  const checkIfApprovalRequired = async () => {
+    const currentApproval = await getTokenAllowance(userAccount, DAI);
+    const totalAmountBn = ethers.utils.parseUnits(totalAmount.toString(), "18");
+
     // If currentApproval are greater than pendingApprovals plus totalamountBn, then no need to approva again
-    console.log(`Current Approvals: ${currentApproval.toString()}`)
-    console.log(`Pending Approvals: ${pendingApproval.toString()}`)
-    console.log(`Total amount: ${totalAmountBn.toString()}`)
-    if(currentApproval.gte(totalAmountBn.add(pendingApproval))) {
-      setNeedsApproval(false)
+    console.log(`Current Approvals: ${currentApproval.toString()}`);
+    console.log(`Pending Approvals: ${pendingApproval.toString()}`);
+    console.log(`Total amount: ${totalAmountBn.toString()}`);
+    if (currentApproval.gte(totalAmountBn.add(pendingApproval))) {
+      setNeedsApproval(false);
     } else {
-      setNeedsApproval(true)
+      setNeedsApproval(true);
     }
-  }
-  
-  /* eslint-disable react-hooks/exhaustive-deps */ 
+  };
+
+  /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
     if (data) {
-      const newPendingApproval = getPendingApprovalAmount(data.cycleWrappers)
-      const newPendingApprovalBn = ethers.BigNumber.from(newPendingApproval.toString())
-      if(!newPendingApprovalBn.eq(pendingApproval)) setPendingApproval(newPendingApprovalBn)
+      const newPendingApproval = getPendingApprovalAmount(data.cycleWrappers);
+      const newPendingApprovalBn = ethers.BigNumber.from(
+        newPendingApproval.toString()
+      );
+      if (!newPendingApprovalBn.eq(pendingApproval))
+        setPendingApproval(newPendingApprovalBn);
     }
-      
-  }, [loading, pendingApproval, totalAmount])
-  
+  }, [loading, pendingApproval, totalAmount]);
+
   useEffect(() => {
-    checkIfApprovalRequired()
-  }, [pendingApproval, totalAmount])
+    checkIfApprovalRequired();
+  }, [pendingApproval, totalAmount]);
 
   return (
     <>
       <CardWrapper>
         <ViewCard>
-          <label style={{ margin: '10px' }}>
-            Total Amount of DAI to sell for WETH 
+          <label style={{ margin: "10px" }}>
+            Total Amount of DAI to sell for WETH
           </label>
-          <label style={{ marginBottom: '8px', fontSize: '10px' }}>
-          (min. 300 DAI, more is better)
+          <label style={{ marginBottom: "8px", fontSize: "10px" }}>
+            (min. 300 DAI, more is better)
           </label>
-
 
           <input
-            style={{ maxWidth: '80%' }}
+            style={{ maxWidth: "80%" }}
             type="number"
             value={totalAmount}
             onChange={handleTotalAmountChange}
@@ -136,12 +132,12 @@ const SubmitTask = ({ userAccount, userAddress }) => {
         </ViewCard>
 
         <ViewCard>
-          <label style={{ margin: '10px' }}>
+          <label style={{ margin: "10px" }}>
             Interval between each trade (in seconds)
           </label>
 
           <input
-            style={{ maxWidth: '80%' }}
+            style={{ maxWidth: "80%" }}
             type="number"
             value={intervalSeconds}
             onChange={handleIntervalSecondsChange}
@@ -150,12 +146,12 @@ const SubmitTask = ({ userAccount, userAddress }) => {
         </ViewCard>
 
         <ViewCard>
-          <label style={{ margin: '10px' }}>
+          <label style={{ margin: "10px" }}>
             Number of trades to split the total amount up
           </label>
 
           <input
-            style={{ maxWidth: '80%' }}
+            style={{ maxWidth: "80%" }}
             type="number"
             value={tradeNum}
             onChange={handleTradeNumChange}
@@ -165,7 +161,7 @@ const SubmitTask = ({ userAccount, userAddress }) => {
       </CardWrapper>
       <CardWrapper>
         <ViewCard>
-          <label style={{ margin: '10px' }}>
+          <label style={{ margin: "10px" }}>
             {`Approve ${parseFloat(totalAmount).toFixed(3)} DAI`}
           </label>
           {!txLoading && needsApproval && (
@@ -186,15 +182,13 @@ const SubmitTask = ({ userAccount, userAddress }) => {
               </Button>
             </>
           )}
-          { !needsApproval && (
-            `✅`
-          )}
+          {!needsApproval && `✅`}
           {txLoading && <p>waiting...</p>}
         </ViewCard>
         <ViewCard>
-          <label style={{ margin: '10px' }}>
+          <label style={{ margin: "10px" }}>
             {`Execute ${tradeNum} trades, each worth ${parseFloat(
-              totalAmount / tradeNum,
+              totalAmount / tradeNum
             ).toFixed(3)} DAI`}
           </label>
           {!txLoading && !needsApproval && (

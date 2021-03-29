@@ -1,5 +1,5 @@
-import React from 'react';
-import { Button, ViewCard } from '../components';
+import React from "react";
+import { Button, ViewCard } from "../components";
 
 const ViewCardButton = ({ title, action }) => {
   return (

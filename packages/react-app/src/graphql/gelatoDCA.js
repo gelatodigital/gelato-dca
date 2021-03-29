@@ -1,4 +1,4 @@
-import { gql } from 'apollo-boost';
+import { gql } from "apollo-boost";
 
 const GET_GELATO_DCA_TASK_CYCLES = gql`
   query gelatoDCATasks($skip: Int, $userAddress: String!) {
@@ -29,10 +29,7 @@ const GET_GELATO_DCA_TASK_CYCLES = gql`
         executorFee
         feeToken
       }
-      completedTrades (
-        orderBy: submissionHash
-        orderDirection: desc) 
-      {
+      completedTrades(orderBy: submissionHash, orderDirection: desc) {
         id
         cycleId
         status
