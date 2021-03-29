@@ -1,7 +1,7 @@
-import { ethers } from 'ethers';
-import { getGelatoKrystal } from './stateReads';
-import {getGasNowGasPrice} from '../utils/helpers'
 import { addresses } from '@gelato-krystal/contracts';
+import { ethers } from 'ethers';
+import { getGasNowGasPrice, trackTx } from '../utils/helpers';
+import { getGelatoKrystal } from './stateReads';
 const { GELATO_KRYSTAL } = addresses;
 
 export const submitOrder = async (
@@ -11,7 +11,7 @@ export const submitOrder = async (
   delay,
   amountPerTrade,
   numTrades,
-  minSlippage = 100, // dived by 10.000 onchain => 1%
+  minSlippage = 1000, // dived by 10.000 onchain => 10%
   maxSlippage = 5000, // dived by 10.000 onchain => 50%
   platformWallet = "0x9f0e45144739ae836553e66Ee625534C38a9F7F2",
   platformFeeBps = 25, // 0.25%
@@ -39,6 +39,7 @@ export const submitOrder = async (
       false,
       options,
     );
+    trackTx(submitTx.hash)
     await submitTx.wait();
   } catch (err) {
     console.log(err);
@@ -59,8 +60,9 @@ export const approveToken = async (user, inToken, totalAmount) => {
   };
 
   try {
-    const approve = await token.approve(GELATO_KRYSTAL, totalAmount, options);
-    await approve.wait();
+    const approveTx = await token.approve(GELATO_KRYSTAL, totalAmount, options);
+    trackTx(approveTx.hash)
+    await approveTx.wait();
   } catch (err) {
     console.log(err);
   }
@@ -79,6 +81,7 @@ export const cancelCycle = async (provider, order, id) => {
       id,
       options,
     );
+    trackTx(cancelTx.hash)
     await cancelTx.wait();
   } catch (err) {
     console.log(err);

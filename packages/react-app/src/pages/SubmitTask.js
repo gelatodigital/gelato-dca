@@ -1,20 +1,40 @@
-import React, { useState, useEffect } from 'react';
-import { ethers, BigNumber } from 'ethers';
-import { ViewCard, CardWrapper, Button } from '../components';
-import { submitOrder, approveToken } from '../services/stateWrites';
+import { useQuery } from '@apollo/react-hooks';
 import { addresses } from '@gelato-krystal/contracts';
+import { BigNumber, ethers } from 'ethers';
+import React, { useEffect, useState } from 'react';
+import { Button, CardWrapper, ViewCard } from '../components';
+import GET_GELATO_DCA_TASK_CYCLES from '../graphql/gelatoDCA';
+import { getTokenAllowance } from '../services/stateReads';
+import { approveToken, submitOrder } from '../services/stateWrites';
+import { getPendingApprovalAmount } from '../utils/helpers';
 const { DAI, WETH } = addresses;
 
-const SubmitTask = ({ userAccount }) => {
-  const [loading, setLoading] = useState(false);
+
+const SubmitTask = ({ userAccount, userAddress }) => {
+  // get data from subgraph
+  const { loading, data,  } = useQuery(
+    GET_GELATO_DCA_TASK_CYCLES,
+    {
+      variables: {
+        skip: 0,
+        userAddress: userAddress.toLowerCase(),
+      },
+    },
+  );
+
+  // internal state
+  const [pendingApproval, setPendingApproval] = useState(ethers.constants.Zero);
+  const [txLoading, setTxLoading] = useState(false);
   const [totalAmount, setTotalAmount] = useState(30);
   const [intervalSeconds, setIntervalSeconds] = useState(120);
   const [tradeNum, setTradeNum] = useState(3);
-  const [notApproved, setNotApproved] = useState(true);
+  const [needsApproval, setNeedsApproval] = useState(true);
 
   const handleTotalAmountChange = async (event) => {
     const newValue = event.target.value;
-    setTotalAmount(newValue);
+    if (newValue=== '') setTotalAmount(0);
+    else
+      setTotalAmount(newValue);
   };
 
   const handleIntervalSecondsChange = async (event) => {
@@ -65,17 +85,46 @@ const SubmitTask = ({ userAccount }) => {
     );
   };
 
-  // useEffect(() => {
-  //   inputsUpdates();
-  // });
+  const checkIfApprovalRequired = async() => {
+    const currentApproval = await getTokenAllowance(userAccount, DAI)
+    const totalAmountBn = ethers.utils.parseUnits(totalAmount.toString(), '18')
+    
+    // If currentApproval are greater than pendingApprovals plus totalamountBn, then no need to approva again
+    console.log(`Current Approvals: ${currentApproval.toString()}`)
+    console.log(`Pending Approvals: ${pendingApproval.toString()}`)
+    console.log(`Total amount: ${totalAmountBn.toString()}`)
+    if(currentApproval.gte(totalAmountBn.add(pendingApproval))) {
+      setNeedsApproval(false)
+    } else {
+      setNeedsApproval(true)
+    }
+  }
+  
+  /* eslint-disable react-hooks/exhaustive-deps */ 
+  useEffect(() => {
+    if (data) {
+      const newPendingApproval = getPendingApprovalAmount(data.cycleWrappers)
+      const newPendingApprovalBn = ethers.BigNumber.from(newPendingApproval.toString())
+      if(!newPendingApprovalBn.eq(pendingApproval)) setPendingApproval(newPendingApprovalBn)
+    }
+      
+  }, [loading, pendingApproval, totalAmount])
+  
+  useEffect(() => {
+    checkIfApprovalRequired()
+  }, [pendingApproval, totalAmount])
 
   return (
     <>
       <CardWrapper>
         <ViewCard>
           <label style={{ margin: '10px' }}>
-            Total Amount of DAI to sell for WETH
+            Total Amount of DAI to sell for WETH 
           </label>
+          <label style={{ marginBottom: '8px', fontSize: '10px' }}>
+          (min. 300 DAI, more is better)
+          </label>
+
 
           <input
             style={{ maxWidth: '80%' }}
@@ -119,17 +168,17 @@ const SubmitTask = ({ userAccount }) => {
           <label style={{ margin: '10px' }}>
             {`Approve ${parseFloat(totalAmount).toFixed(3)} DAI`}
           </label>
-          {!loading && notApproved && (
+          {!txLoading && needsApproval && (
             <>
               <Button
                 onClick={async () => {
-                  setLoading(true);
+                  setTxLoading(true);
                   try {
                     await approve();
-                    setNotApproved(false);
-                    setLoading(false);
+                    setNeedsApproval(false);
+                    setTxLoading(false);
                   } catch {
-                    setLoading(false);
+                    setTxLoading(false);
                   }
                 }}
               >
@@ -137,7 +186,10 @@ const SubmitTask = ({ userAccount }) => {
               </Button>
             </>
           )}
-          {loading && <p>waiting...</p>}
+          { !needsApproval && (
+            `✅`
+          )}
+          {txLoading && <p>waiting...</p>}
         </ViewCard>
         <ViewCard>
           <label style={{ margin: '10px' }}>
@@ -145,23 +197,23 @@ const SubmitTask = ({ userAccount }) => {
               totalAmount / tradeNum,
             ).toFixed(3)} DAI`}
           </label>
-          {!loading && !notApproved && (
+          {!txLoading && !needsApproval && (
             <Button
-              disabled={notApproved}
+              disabled={needsApproval}
               onClick={async () => {
-                setLoading(true);
+                setTxLoading(true);
                 try {
                   await submit();
-                  setLoading(false);
+                  setTxLoading(false);
                 } catch {
-                  setLoading(false);
+                  setTxLoading(false);
                 }
               }}
             >
               {`Submit Task`}
             </Button>
           )}
-          {loading && <p>waiting...</p>}
+          {txLoading && <p>waiting...</p>}
         </ViewCard>
       </CardWrapper>
     </>

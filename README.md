@@ -12,9 +12,14 @@ Run
 yarn
 ```
 
-Add alchemy id in packages/hardhat/.env
+**Add alchemy id in packages/hardhat/.env**
 ```
 ALCHEMY_ID=""
+```
+
+**Add Blocknative notify.js key in packages/react-app/.env**
+```
+REACT_APP_BLOCK_NATIVE=""
 ```
 
 ## Run the React App (ROPSTEN ONLY)

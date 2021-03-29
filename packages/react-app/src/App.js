@@ -1,22 +1,22 @@
 /* eslint-disable */
-import React, { useCallback, useEffect, useState } from 'react';
 import { Web3Provider } from '@ethersproject/providers';
-import User from './pages/User';
-import SubmitTask from './pages/SubmitTask';
-import TaskOverview from './pages/TaskOverview';
-import GelatoLogo from './components/Logo';
-
-import { Body, Button, Header, Page, CardWrapper } from './components';
-
-import { web3Modal, logoutOfWeb3Modal } from './utils/web3Modal';
-
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   BrowserRouter as Router,
-  Switch,
-  Route,
+
+
   Link,
-  Redirect,
+  Redirect, Route, Switch
 } from 'react-router-dom';
+import { Body, Button, CardWrapper, Header, Page } from './components';
+import GelatoLogo from './components/Logo';
+import SubmitTask from './pages/SubmitTask';
+import TaskOverview from './pages/TaskOverview';
+import User from './pages/User';
+import { logoutOfWeb3Modal, web3Modal } from './utils/web3Modal';
+
+
+
 
 function WalletButton({ userAccount, loadWeb3Modal }) {
   return (
@@ -126,7 +126,9 @@ function App() {
             {userAccount && (
               <>
                 <Route path="/submit-task">
-                  <SubmitTask userAccount={userAccount}></SubmitTask>
+                  {userAccount && userAddress && (
+                    <SubmitTask userAccount={userAccount} userAddress={userAddress}></SubmitTask>
+                  )}
                 </Route>
                 <Route path="/task-overview">
                   {userAccount && userAddress && (
