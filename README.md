@@ -5,6 +5,14 @@ Monorepo containing:
 - Hardhat package with SC tests & deployment files
 - Contracts package containing addresses and ABIs
 
+## Watch a quick video walkthrough of the UI
+<a href="https://drive.google.com/file/d/162iUBphXUBZ2oBTIxDF5PTGxj52KBLNZ/view?usp=sharing" target="_blank">
+<img src="./dca.png"
+     alt="DCA Image"
+     style="width: 640px;" 
+/>
+
+
 ## Setup
 
 Run
@@ -22,7 +30,7 @@ ALCHEMY_ID=""
 REACT_APP_BLOCK_NATIVE=""
 ```
 
-## Run the React App (ROPSTEN ONLY)
+## Run the React App (MAINNET)
 
 ```
 yarn react-app:start
