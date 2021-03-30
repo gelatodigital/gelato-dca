@@ -1,8 +1,8 @@
+import { abis, addresses } from "@gelato-krystal/contracts";
 import { ethers } from "ethers";
 import { getMiniAddress } from "../utils/helpers";
-import { addresses, abis } from "@gelato-krystal/contracts";
 
-const { GELATO_GAS_PRICE_ORACLE, GELATO_KRYSTAL } = addresses;
+const { GELATO_GAS_PRICE_ORACLE, GELATO_DCA } = addresses;
 const { GelatoKrystalAbi } = abis;
 
 export const getUserAddress = async (provider) => {
@@ -19,7 +19,7 @@ export const getGelatoKrystal = async (user) => {
   let gelatoKrystalContract;
   try {
     gelatoKrystalContract = new ethers.Contract(
-      GELATO_KRYSTAL,
+      GELATO_DCA,
       GelatoKrystalAbi,
       signer
     );
@@ -51,7 +51,7 @@ export const getTokenAllowance = async (user, token) => {
     ["function allowance(address,address) view returns (uint256)"],
     signer
   );
-  const userBalance = await tokenContract.allowance(userAddr, GELATO_KRYSTAL);
+  const userBalance = await tokenContract.allowance(userAddr, GELATO_DCA);
   return userBalance;
 };
 

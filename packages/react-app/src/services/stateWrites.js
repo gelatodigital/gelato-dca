@@ -2,7 +2,7 @@ import { addresses } from "@gelato-krystal/contracts";
 import { ethers } from "ethers";
 import { getGasNowGasPrice, trackTx } from "../utils/helpers";
 import { getGelatoKrystal } from "./stateReads";
-const { GELATO_KRYSTAL } = addresses;
+const { GELATO_DCA } = addresses;
 
 export const submitOrder = async (
   user,
@@ -56,7 +56,7 @@ export const approveToken = async (user, inToken, totalAmount) => {
   };
 
   try {
-    const approveTx = await token.approve(GELATO_KRYSTAL, totalAmount, options);
+    const approveTx = await token.approve(GELATO_DCA, totalAmount, options);
     trackTx(approveTx.hash);
     await approveTx.wait();
   } catch (err) {
