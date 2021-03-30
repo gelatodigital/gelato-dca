@@ -153,6 +153,7 @@ const TaskOverview = ({ userAddress, userAccount }) => {
     const newRows = [];
     // Filter all tasks by known Tash Hashes
     let id = 0;
+    console.log(data.cycleWrappers)
     for (let wrapper of data.cycleWrappers) {
       pushEmptyRow(newRows);
       const fetchtedUserAddress = wrapper.cycle.user;
@@ -211,7 +212,6 @@ const TaskOverview = ({ userAddress, userAccount }) => {
           : wrapper.status === "cancelled"
           ? "cancelled"
           : "pending";
-        console.log(trade);
         const received =
           trade && trade.amountReceived
             ? `${parseFloat(utils.formatEther(trade.amountReceived)).toFixed(

@@ -154,7 +154,7 @@ export const getPendingApprovalAmount = (cyclesWrappers) => {
   let pendingApproval = 0;
   cyclesWrappers.forEach((wrapper) => {
     const cycle = wrapper.cycle;
-    if (wrapper.status === "awaitingExec")
+    if (wrapper.status === "inProgress")
       pendingApproval =
         pendingApproval +
         parseInt(cycle.amountPerTrade) * parseInt(cycle.nTradesLeft);
