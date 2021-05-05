@@ -18,7 +18,8 @@
     "react-app:eject": "yarn workspace @gelato-krystal/react-app eject",
     "react-app:ipfs": "yarn workspace @gelato-krystal/react-app ipfs",
     "react-app:start": "yarn workspace @gelato-krystal/react-app start",
-    "react-app:test": "yarn workspace @gelato-krystal/react-app test"
+    "react-app:test": "yarn workspace @gelato-krystal/react-app test",
+    "deploy-dca-ropsten": "yarn workspace @gelato-krystal/hardhat hardhat deploy --tags GelatoDCA --network ropsten"
   },
   "workspaces": {
     "packages": [

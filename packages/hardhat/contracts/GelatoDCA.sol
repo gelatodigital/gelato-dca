@@ -186,54 +186,6 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
         emit LogTaskCancelled(_id, _order);
     }
 
-    // solhint-disable-next-line function-max-lines
-    function editNumTrades(
-        ExecOrder calldata _order,
-        uint256 _id,
-        uint256 _newNumTradesLeft
-    ) external payable nonReentrant {
-        require(
-            _order.nTradesLeft != _newNumTradesLeft,
-            "GelatoDCA.editNumTrades: order does not need update"
-        );
-        require(_newNumTradesLeft > 0, "GelatoDCA.editNumTrades: cannot be 0");
-        ExecOrder memory newOrder =
-            ExecOrder({
-                user: _order.user,
-                inToken: _order.inToken,
-                outToken: _order.outToken,
-                amountPerTrade: _order.amountPerTrade,
-                nTradesLeft: _newNumTradesLeft, // the only updateable field for now
-                minSlippage: _order.minSlippage,
-                maxSlippage: _order.maxSlippage,
-                delay: _order.delay,
-                lastExecutionTime: _order.lastExecutionTime,
-                platformWallet: _order.platformWallet,
-                platformFeeBps: _order.platformFeeBps
-            });
-        _updateTask(abi.encode(_order), abi.encode(newOrder), _id, msg.sender);
-        if (_order.inToken == ETH) {
-            if (_order.nTradesLeft > _newNumTradesLeft) {
-                uint256 refundAmount =
-                    _order.amountPerTrade *
-                        (_order.nTradesLeft - _newNumTradesLeft);
-                (bool success, ) = _order.user.call{value: refundAmount}("");
-                require(success, "GelatoDCA.editNumTrades: revert on transfer");
-            } else {
-                uint256 topUpAmount =
-                    _order.amountPerTrade *
-                        (_newNumTradesLeft - _order.nTradesLeft);
-
-                require(
-                    topUpAmount == msg.value,
-                    "GelatoDCA.editNumTrades: mismatching amount of ETH deposited"
-                );
-            }
-        }
-
-        emit LogTaskUpdated(_id, newOrder);
-    }
-
     function claimPlatformFees(
         address[] calldata _platformWallets,
         address[] calldata _tokens
