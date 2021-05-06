@@ -23,7 +23,7 @@ module.exports = async (hre) => {
       hre.network.config.SushiswapRouter,
       hre.network.config.Gelato,
     ],
-    gasPrice: hre.ethers.utils.parseUnits('10', 'gwei'),
+    gasPrice: hre.ethers.utils.parseUnits('55', 'gwei'),
     gasLimit: 5000000,
   });
 };
