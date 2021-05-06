@@ -66,7 +66,7 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
 
     mapping(address => mapping(address => uint256)) public platformWalletFees;
 
-    event LogTaskSubmitted(uint256 indexed id, ExecOrder order);
+    event LogTaskSubmitted(uint256 indexed id, ExecOrder order, bool isSubmitAndExec);
     event LogTaskCancelled(uint256 indexed id, ExecOrder order);
     event LogTaskUpdated(uint256 indexed id, ExecOrder order);
     event LogDCATrade(uint256 indexed id, ExecOrder order, uint256 outAmount);
@@ -90,6 +90,7 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
     function submit(SubmitOrder memory _order, bool _isSubmitAndExec)
         public
         payable
+        returns (ExecOrder memory order, uint256 id)
     {
         if (_order.inToken == ETH) {
             uint256 value =
@@ -101,7 +102,7 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
                 "GelatoDCA.submit: mismatching amount of ETH deposited"
             );
         }
-        ExecOrder memory order =
+        order =
             ExecOrder({
                 user: msg.sender,
                 inToken: _order.inToken,
@@ -117,7 +118,7 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
             });
 
         // store order
-        _storeOrder(order);
+        id = _storeOrder(order, _isSubmitAndExec);
     }
 
     // solhint-disable-next-line function-max-lines
@@ -134,7 +135,7 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
 
         // 1. Submit future orders
         _order.numTrades = _order.numTrades - 1;
-        submit(_order, true);
+        (ExecOrder memory order, uint256 id) = submit(_order, true);
 
         // 2. Exec 1st Trade now
         if (_order.inToken != ETH) {
@@ -149,8 +150,9 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
             );
         }
 
+        uint256 received;
         if (_protocol == Dex.KYBER) {
-            _doKyberTrade(
+            received = _doKyberTrade(
                 _order.inToken,
                 _order.outToken,
                 _order.amountPerTrade,
@@ -160,7 +162,7 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
                 _order.platformFeeBps
             );
         } else {
-            _doUniswapTrade(
+            received = _doUniswapTrade(
                 _protocol == Dex.UNISWAP ? uniRouterV2 : sushiRouterV2,
                 _tradePath,
                 _order.amountPerTrade,
@@ -170,6 +172,8 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
                 _order.platformFeeBps
             );
         }
+        
+        emit LogDCATrade(id, order, received);
     }
 
     function cancel(ExecOrder calldata _order, uint256 _id)
@@ -501,12 +505,12 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
         _order.lastExecutionTime = block.timestamp;
 
         _updateTask(lastOrder, abi.encode(_order), _id, _order.user);
-        emit LogTaskSubmitted(_id, _order);
+        emit LogTaskSubmitted(_id, _order, false);
     }
 
-    function _storeOrder(ExecOrder memory _order) private {
-        uint256 id = _storeTask(abi.encode(_order), _order.user);
-        emit LogTaskSubmitted(id, _order);
+    function _storeOrder(ExecOrder memory _order, bool _isSubmitAndExec) private returns (uint256 id) {
+        id = _storeTask(abi.encode(_order), _order.user);
+        emit LogTaskSubmitted(id, _order, _isSubmitAndExec);
     }
 
     function _getKyberRate(
