@@ -19,7 +19,8 @@
     "react-app:ipfs": "yarn workspace @gelato-krystal/react-app ipfs",
     "react-app:start": "yarn workspace @gelato-krystal/react-app start",
     "react-app:test": "yarn workspace @gelato-krystal/react-app test",
-    "deploy-dca-ropsten": "yarn workspace @gelato-krystal/hardhat hardhat deploy --tags GelatoDCA --network ropsten"
+    "deploy-dca-ropsten": "yarn workspace @gelato-krystal/hardhat hardhat deploy --tags GelatoDCA --network ropsten",
+    "verify--mainnet": "yarn workspace @gelato-krystal/hardhat hardhat etherscan-verify --solc-input --network mainnet"
   },
   "workspaces": {
     "packages": [
