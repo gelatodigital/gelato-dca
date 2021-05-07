@@ -2,10 +2,12 @@ require('@nomiclabs/hardhat-waffle');
 require('@nomiclabs/hardhat-ethers');
 require('hardhat-deploy');
 require('hardhat-gas-reporter');
+require("@nomiclabs/hardhat-etherscan");
 require('dotenv').config();
 const { task } = require('hardhat/config');
 
 const ALCHEMY_ID = process.env.ALCHEMY_ID;
+const ETHERSCAN_ID = process.env.ETHERSCAN_API_KEY;
 const PRIVATE_KEY_TEST = process.env.PRIVATE_KEY_TEST;
 const PRIVATE_KEY_MAINNET = process.env.PRIVATE_KEY_MAINNET;
 
@@ -85,6 +87,11 @@ module.exports = {
       accounts: PRIVATE_KEY_MAINNET ? [PRIVATE_KEY_MAINNET] : [],
       ...mainnetAddresses,
     },
+  },
+  etherscan: {
+    // Your API key for Etherscan
+    // Obtain one at https://etherscan.io/
+    apiKey: ETHERSCAN_ID
   },
   solidity: {
     compilers: [
