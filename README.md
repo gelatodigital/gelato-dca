@@ -20,7 +20,7 @@ https://gelato-krystal.vercel.app/
 
 ## Mainnet Contract
 
-**GelatoDCA:** [0x96A6877Ac1A2E560dF6e50b5bc69B2048F36b059](https://etherscan.io/address/0x96A6877Ac1A2E560dF6e50b5bc69B2048F36b059)
+**GelatoDCA:** [0x1338548a1a6Ec68277496a710815D76A02838216](https://etherscan.io/address/0x1338548a1a6Ec68277496a710815D76A02838216)
 
 ## Setup
 
