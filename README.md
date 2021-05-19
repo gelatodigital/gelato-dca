@@ -1,4 +1,4 @@
-# Gelato Krystal - Dollar Cost Averaging - Monorepo
+# Gelato DCA - Dollar Cost Averaging - Monorepo
 Monorepo containing:
 
 - React App
