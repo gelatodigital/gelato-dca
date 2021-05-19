@@ -2,10 +2,12 @@ require('@nomiclabs/hardhat-waffle');
 require('@nomiclabs/hardhat-ethers');
 require('hardhat-deploy');
 require('hardhat-gas-reporter');
+require("@nomiclabs/hardhat-etherscan");
 require('dotenv').config();
 const { task } = require('hardhat/config');
 
 const ALCHEMY_ID = process.env.ALCHEMY_ID;
+const ETHERSCAN_ID = process.env.ETHERSCAN_API_KEY;
 const PRIVATE_KEY_TEST = process.env.PRIVATE_KEY_TEST;
 const PRIVATE_KEY_MAINNET = process.env.PRIVATE_KEY_MAINNET;
 
@@ -21,7 +23,7 @@ const ETH_ADDRESS = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
 const USD_ADDRESS = '0x7354C81fbCb229187480c4f497F945C6A312d5C3';
 
 const mainnetAddresses = {
-  Gelato: '0x3CACa7b48D0573D793d3b0279b5F0029180E83b6',
+  Gelato: '0x3caca7b48d0573d793d3b0279b5f0029180e83b6',
   KyberProxy: '0x9AAb3f75489902f3a48495025729a0AF77d4b11e',
   UniswapRouter: '0x7a250d5630b4cf539739df2c5dacb4c659f2488d',
   SushiswapRouter: '0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f',
@@ -38,7 +40,22 @@ const mainnetAddresses = {
   KrystalPlatformWallet: '0x3ffff2f4f6c0831fac59534694acd14ac2ea501b'
 };
 
-const ropstenAddresses = {};
+const ropstenAddresses = {
+  Gelato: "0xCc4CcD69D31F9FfDBD3BFfDe49c6aA886DaB98d9",
+  GelatoCore: "0xb916929A3cD2862835Ca59118Cc584355928d341",
+  GelatoProvider: "0x8d26D02f7228F2527e226Cc6506B812A736a2CB2",
+  GelatoGasPriceOracle: "0x20F44678Fc2344a78E84192e82Cede989Bf1da6F",
+  OracleAggregator: "0x9622cd7920549AF782f68E9cF1D8d15D33A281F5",
+  SmartWalletSwapProxy: "0x4A0C59CcCae7B4F0732a4A1b9A7BDA49cc1d88F9",
+  UniswapRouter: "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",
+  SushiswapRouter: "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",
+  PlatformWallet: "0x3fFFF2F4f6C0831FAC59534694ACd14AC2Ea501b",
+  GelatoDiamond: "0x782995A5C807EDd8266fDbfC89f068C475a5bF53",
+  GelatoKrystal: "0x492BeDFEAE6a79C6237509061F436a8BfC24F75b",
+  KyberProxy: "0x818E6FECD516Ecc3849DAf6845e3EC868087B755",
+  ETH: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+}
+
 
 module.exports = {
   defaultNetwork: 'hardhat',
@@ -70,10 +87,11 @@ module.exports = {
       accounts: PRIVATE_KEY_MAINNET ? [PRIVATE_KEY_MAINNET] : [],
       ...mainnetAddresses,
     },
-    mainnet: {
-      url: `https://eth-mainnet.alchemyapi.io/v2/${ALCHEMY_ID}`,
-      addresses: mainnetAddresses,
-    }
+  },
+  etherscan: {
+    // Your API key for Etherscan
+    // Obtain one at https://etherscan.io/
+    apiKey: ETHERSCAN_ID
   },
   solidity: {
     compilers: [
