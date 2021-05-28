@@ -1,3 +1,4 @@
 node_modules
 packages/react-app/.env
 packages/hardhat/.env
+.DS_Store

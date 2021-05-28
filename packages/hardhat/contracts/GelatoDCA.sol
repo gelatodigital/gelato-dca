@@ -10,7 +10,6 @@ import {
     ReentrancyGuard
 } from "./vendor/openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Utils} from "./vendor/kyber/utils/Utils.sol";
-import {IKyberProxy} from "./vendor/kyber/utils/IKyberProxy.sol";
 import {
     IChainlinkOracle
 } from "./interfaces/chainlink/IChainlinkOracle.sol";
@@ -25,8 +24,9 @@ import {_transferEthOrToken} from "./gelato/functions/FPayment.sol";
 import {ETH} from "./gelato/constants/CTokens.sol";
 import {Fee} from "./gelato/structs/SGelato.sol";
 import {IGelato} from "./interfaces/gelato/IGelato.sol";
+import {TwapOracle} from "./oracle/TwapOracle.sol";
 
-contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
+contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils, TwapOracle {
     using SafeERC20 for IERC20;
 
     struct SubmitOrder {
@@ -55,14 +55,12 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
         uint256 platformFeeBps;
     }
 
-    enum Dex {KYBER, UNISWAP, SUSHISWAP}
+    enum Dex {UNISWAP, SUSHISWAP}
 
-    bytes public constant HINT = "";
     uint256 internal constant _MAX_AMOUNT = type(uint256).max;
 
     IUniswapV2Router02 public immutable uniRouterV2;
     IUniswapV2Router02 public immutable sushiRouterV2;
-    IKyberProxy public immutable kyberProxy;
 
     mapping(address => mapping(address => uint256)) public platformWalletFees;
 
@@ -77,12 +75,17 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
     );
 
     constructor(
-        IKyberProxy _kyberProxy,
         IUniswapV2Router02 _uniRouterV2,
         IUniswapV2Router02 _sushiRouterV2,
-        address _gelato
-    ) SimpleServiceStandard(_gelato) {
-        kyberProxy = _kyberProxy;
+        address _gelato,
+        address _factory,
+        uint32 _period,
+        uint32 _maxPeriod,
+        bytes32 _initHash
+    )
+        SimpleServiceStandard(_gelato)
+        TwapOracle(_factory, _period, _maxPeriod, _initHash)
+    {
         uniRouterV2 = _uniRouterV2;
         sushiRouterV2 = _sushiRouterV2;
     }
@@ -119,6 +122,7 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
 
         // store order
         id = _storeOrder(order, _isSubmitAndExec);
+        getStartOracleTask(id, order.delay, order.lastExecutionTime);
     }
 
     // solhint-disable-next-line function-max-lines
@@ -151,27 +155,16 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
         }
 
         uint256 received;
-        if (_protocol == Dex.KYBER) {
-            received = _doKyberTrade(
-                _order.inToken,
-                _order.outToken,
-                _order.amountPerTrade,
-                _minReturnOrRate,
-                payable(msg.sender),
-                payable(_order.platformWallet),
-                _order.platformFeeBps
-            );
-        } else {
-            received = _doUniswapTrade(
-                _protocol == Dex.UNISWAP ? uniRouterV2 : sushiRouterV2,
-                _tradePath,
-                _order.amountPerTrade,
-                _minReturnOrRate,
-                payable(msg.sender),
-                payable(_order.platformWallet),
-                _order.platformFeeBps
-            );
-        }
+      
+        received = _doUniswapTrade(
+            _protocol == Dex.UNISWAP ? uniRouterV2 : sushiRouterV2,
+            _tradePath,
+            _order.amountPerTrade,
+            _minReturnOrRate,
+            payable(msg.sender),
+            payable(_order.platformWallet),
+            _order.platformFeeBps
+        );
         
         emit LogDCATrade(id, order, received);
     }
@@ -238,17 +231,15 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
 
         // action exec
         uint256 outAmount;
-        if (_protocol == Dex.KYBER) {
-            outAmount = _actionKyber(_order, _fee.amount, _fee.isOutToken);
-        } else {
-            outAmount = _actionUniOrSushi(
-                _order,
-                _protocol,
-                _tradePath,
-                _fee.amount,
-                _fee.isOutToken
-            );
-        }
+        
+        outAmount = _actionUniOrSushi(
+            _id,
+            _order,
+            _protocol,
+            _tradePath,
+            _fee.amount,
+            _fee.isOutToken
+        );
 
         if (_fee.isOutToken) {
             _transferEthOrToken(
@@ -269,19 +260,13 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
         return verifyTask(abi.encode(_order), _id, _order.user);
     }
 
-    function getMinReturn(ExecOrder memory _order)
+    function getMinReturn(uint256 _id, ExecOrder memory _order)
         public
         view
         returns (uint256 minReturn)
     {
         // 4. Rate Check
-        (uint256 idealReturn, ) =
-            IOracleAggregator(IGelato(gelato).getOracleAggregator())
-                .getExpectedReturnAmount(
-                _order.amountPerTrade,
-                _order.inToken,
-                _order.outToken
-            );
+        uint256 idealReturn = getPrice(_id, _order.amountPerTrade);
 
         require(
             idealReturn > 0,
@@ -319,54 +304,8 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
     }
 
     // ############# PRIVATE #############
-    function _actionKyber(
-        ExecOrder memory _order,
-        uint256 _fee,
-        bool _outTokenFee
-    ) private returns (uint256 received) {
-        (uint256 inAmount, uint256 minReturn, address payable receiver) =
-            _preExec(_order, _fee, _outTokenFee, Dex.KYBER);
-
-        received = _doKyberTrade(
-            _order.inToken,
-            _order.outToken,
-            inAmount,
-            _getKyberRate(inAmount, minReturn, _order.inToken, _order.outToken),
-            receiver,
-            payable(_order.platformWallet),
-            _order.platformFeeBps
-        );
-
-        if (_outTokenFee) {
-            received = received - _fee;
-        }
-    }
-
-    function _doKyberTrade(
-        address _inToken,
-        address _outToken,
-        uint256 _inAmount,
-        uint256 _minRate,
-        address payable _receiver,
-        address payable _platformWallet,
-        uint256 _platformFeeBps
-    ) private returns (uint256 received) {
-        uint256 ethToSend = _inToken == ETH ? _inAmount : uint256(0);
-
-        received = kyberProxy.tradeWithHintAndFee{value: ethToSend}(
-            IERC20(_inToken),
-            _inAmount,
-            IERC20(_outToken),
-            _receiver,
-            _MAX_AMOUNT,
-            _minRate,
-            _platformWallet,
-            _platformFeeBps,
-            HINT
-        );
-    }
-
     function _actionUniOrSushi(
+        uint256 _id,
         ExecOrder memory _order,
         Dex _protocol,
         address[] memory _tradePath,
@@ -374,7 +313,7 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
         bool _outTokenFee
     ) private returns (uint256 received) {
         (uint256 inAmount, uint256 minReturn, address payable receiver) =
-            _preExec(_order, _fee, _outTokenFee, _protocol);
+            _preExec(_id, _order, _fee, _outTokenFee, _protocol);
 
         require(
             _order.inToken == _tradePath[0] &&
@@ -460,6 +399,7 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
 
     // solhint-disable function-max-lines
     function _preExec(
+        uint256 _id,
         ExecOrder memory _order,
         uint256 _fee,
         bool _outTokenFee,
@@ -474,11 +414,11 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
     {
         if (_outTokenFee) {
             receiver = payable(this);
-            minReturn = getMinReturn(_order) + _fee;
+            minReturn = getMinReturn(_id, _order) + _fee;
             inAmount = _order.amountPerTrade;
         } else {
             receiver = payable(_order.user);
-            minReturn = getMinReturn(_order);
+            minReturn = getMinReturn(_id, _order);
             inAmount = _order.amountPerTrade - _fee;
         }
 
@@ -505,33 +445,14 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
         _order.lastExecutionTime = block.timestamp;
 
         _updateTask(lastOrder, abi.encode(_order), _id, _order.user);
+        getStartOracleTask(_id, _order.delay, _order.lastExecutionTime);
+
         emit LogTaskSubmitted(_id, _order, false);
     }
 
     function _storeOrder(ExecOrder memory _order, bool _isSubmitAndExec) private returns (uint256 id) {
         id = _storeTask(abi.encode(_order), _order.user);
         emit LogTaskSubmitted(id, _order, _isSubmitAndExec);
-    }
-
-    function _getKyberRate(
-        uint256 _amountIn,
-        uint256 _minReturn,
-        address _inToken,
-        address _outToken
-    ) private view returns (uint256) {
-        uint256 newAmountIn =
-            _to18Decimals(
-                _inToken,
-                _amountIn,
-                "GelatoDCA:_getKyberRate: newAmountIn revert"
-            );
-        uint256 newMinReturn =
-            _to18Decimals(
-                _outToken,
-                _minReturn,
-                "GelatoDCA:_getKyberRate: newMinReturn revert"
-            );
-        return wdiv(newMinReturn, newAmountIn);
     }
 
     function _addFeeToPlatform(
@@ -547,33 +468,9 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils {
     }
 
     function getProtocolAddress(Dex _dex) public view returns (address) {
-        if (_dex == Dex.KYBER) return address(kyberProxy);
         if (_dex == Dex.UNISWAP) return address(uniRouterV2);
         if (_dex == Dex.SUSHISWAP) return address(sushiRouterV2);
         revert("GelatoDCA: getProtocolAddress: Dex not found");
-    }
-
-    function getExpectedReturnKyber(
-        IERC20 _src,
-        IERC20 _dest,
-        uint256 _inAmount,
-        uint256 _platformFee,
-        bytes calldata _hint
-    ) external view returns (uint256 outAmount, uint256 expectedRate) {
-        try
-            kyberProxy.getExpectedRateAfterFee(
-                _src,
-                _dest,
-                _inAmount,
-                _platformFee,
-                _hint
-            )
-        returns (uint256 rate) {
-            expectedRate = rate;
-        } catch {
-            expectedRate = 0;
-        }
-        outAmount = calcDestAmount(_src, _dest, _inAmount, expectedRate);
     }
 
     function getExpectedReturnUniswap(
