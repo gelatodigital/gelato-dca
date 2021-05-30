@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.0;
 
-import {wdiv} from "./vendor/DSMath.sol";
 import {
     IERC20,
     SafeERC20
@@ -10,10 +9,6 @@ import {
     ReentrancyGuard
 } from "./vendor/openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Utils} from "./vendor/kyber/utils/Utils.sol";
-import {
-    IChainlinkOracle
-} from "./interfaces/chainlink/IChainlinkOracle.sol";
-import {IOracleAggregator} from "./interfaces/gelato/IOracleAggregator.sol";
 import {ITaskStorage} from "./interfaces/gelato/ITaskStorage.sol";
 import {
     IUniswapV2Router02
@@ -290,17 +285,6 @@ contract GelatoDCA is SimpleServiceStandard, ReentrancyGuard, Utils, TwapOracle 
         }
 
         minReturn = (idealReturn * slippage) / BPS;
-    }
-
-    function isSwapPossible(address _inToken, address _outToken)
-        external
-        view
-        returns (bool isPossible)
-    {
-        (uint256 idealReturn, ) =
-            IOracleAggregator(IGelato(gelato).getOracleAggregator())
-                .getExpectedReturnAmount(1e18, _inToken, _outToken);
-        isPossible = idealReturn == 0 ? false : true;
     }
 
     // ############# PRIVATE #############
